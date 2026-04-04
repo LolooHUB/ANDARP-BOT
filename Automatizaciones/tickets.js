@@ -7,175 +7,266 @@ const {
     PermissionFlagsBits, 
     ModalBuilder, 
     TextInputBuilder, 
-    TextInputStyle 
+    TextInputStyle,
+    Collection
 } = require('discord.js');
 const { db, getNextTicketId } = require('./firebase');
 
+/**
+ * LÓGICA DE TICKETS - ANDA RP
+ * Sistema robusto con Logs Estilo Ticket King, Ascensos y Gestión de Canales.
+ */
+
 module.exports = {
+    // --- PANEL INICIAL ---
     async sendTicketPanel(channel) {
         try {
             const embed = new EmbedBuilder()
                 .setColor('#e1ff00')
-                .setTitle('✨ Panel de Tickets - Anda RP')
-                .setDescription('>>> Bienvenido al sistema de soporte. Selecciona una categoría debajo para recibir asistencia personalizada.')
+                .setTitle('Panel de Tickets - Anda RP')
+                .setDescription('Bienvenido al panel de Tickets de Anda RP, aqui podras crear tus tickets basandote en tus requerimientos.\n\n' +
+                                '📌 **Categorías disponibles:**\n' +
+                                '> 📡 **Soporte General:** Dudas y consultas básicas.\n' +
+                                '> 🚫 **Reportes:** Denuncias a usuarios o situaciones.\n' +
+                                '> 🤝 **Alianzas:** Consultas sobre convenios.\n' +
+                                '> 🎫 **VIP:** Atención prioritaria para miembros exclusivos.')
                 .setAuthor({ name: 'Anda RP', iconURL: 'attachment://LogoPFP.png' })
-                .setImage('attachment://LogoPFP.png') // Opcional: Para hacerlo más largo
-                .setFooter({ text: 'Anda RP - Rol de calidad • 2026', iconURL: 'attachment://LogoPFP.png' });
+                .setTimestamp()
+                .setFooter({ text: 'Sistema de Soporte Automático', iconURL: 'attachment://LogoPFP.png' });
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('t_general').setLabel('Soporte General').setEmoji('📡').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('t_reporte').setLabel('Reportes').setEmoji('🚫').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('t_alianza').setLabel('Alianzas').setEmoji('🤝').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('t_vip').setLabel('VIP Prioridad').setEmoji('🎫').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('t_general').setLabel('📡 Soporte General').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('t_reporte').setLabel('🚫 Reportes').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('t_alianza').setLabel('🤝 Alianzas y similares').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('t_vip').setLabel('🎫 [VIP] Atencion Prioritaria').setStyle(ButtonStyle.Secondary)
             );
 
-            await channel.send({ embeds: [embed], components: [row], files: ['./attachment/LogoPFP.png'] });
-        } catch (e) { console.error("Error panel:", e); }
+            await channel.send({ 
+                embeds: [embed], 
+                components: [row], 
+                files: ['./attachment/LogoPFP.png'] 
+            });
+            console.log("✅ Panel de tickets enviado correctamente.");
+        } catch (error) {
+            console.error("❌ Error al enviar el panel de tickets:", error);
+        }
     },
 
+    // --- MANEJO DE INTERACCIONES ---
     async handleTicketInteractions(interaction) {
-        const { customId, guild, member, user } = interaction;
+        if (!interaction.guild) return;
+        const { customId, guild, member, user, channel } = interaction;
 
-        // --- 1. MODALES ---
+        // CONFIGURACIÓN CENTRALIZADA
+        const configs = {
+            general: { cat: '1489831086065324093', role: '1476800914818859018', name: 'Soporte General', color: '#57f287' },
+            reporte: { cat: '1489831182563672075', role: '1476800914818859018', name: 'Reportes', color: '#ed4245' },
+            vip: { cat: '1489831182563672075', role: '1476767461024989326', name: 'Atención VIP', color: '#fee75c' },
+            alianza: { cat: '1489831357357232218', role: '1476767863636234487', name: 'Alianzas y Similares', color: '#5865f2' }
+        };
+
+        const logChannelId = '1476799509207060551';
+        const superiorRoleId = '1476767461024989326';
+
+        // 1. GESTIÓN DE APERTURA (MODALES)
         if (['t_general', 't_vip', 't_reporte', 't_alianza'].includes(customId)) {
-            if (customId === 't_vip' && !member.roles.cache.has('1476765603418079434')) {
-                return interaction.reply({ content: '❌ **No tienes rango VIP.** Consíguelo en: https://andarp.web.app/tienda.html', ephemeral: true });
-            }
+            try {
+                // Verificación de Rango VIP
+                if (customId === 't_vip' && !member.roles.cache.has('1476765603418079434')) {
+                    return interaction.reply({ 
+                        content: '❌ **No tienes el rango VIP necesario.**\nAdquiérelo aquí: https://andarp.web.app/tienda.html', 
+                        ephemeral: true 
+                    });
+                }
 
-            const modal = new ModalBuilder().setCustomId(`modal_${customId}`).setTitle('📝 Formulario de Soporte');
-            
-            if (customId === 't_reporte') {
-                const reportado = new TextInputBuilder().setCustomId('user_reportado').setLabel("Usuario a Reportar").setStyle(TextInputStyle.Short).setPlaceholder('Ej: Juanito123').setRequired(true);
-                const motivo = new TextInputBuilder().setCustomId('motivo_reporte').setLabel("Motivo de Reporte").setStyle(TextInputStyle.Paragraph).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(reportado), new ActionRowBuilder().addComponents(motivo));
-            } else {
-                const robloxUser = new TextInputBuilder().setCustomId('roblox_user').setLabel("Tu Usuario de Roblox").setStyle(TextInputStyle.Short).setRequired(true);
-                const motivo = new TextInputBuilder().setCustomId('motivo_ticket').setLabel("Detalles de tu consulta").setStyle(TextInputStyle.Paragraph).setRequired(true);
-                modal.addComponents(new ActionRowBuilder().addComponents(robloxUser), new ActionRowBuilder().addComponents(motivo));
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_${customId}`)
+                    .setTitle('📝 Formulario de Ticket');
+
+                if (customId === 't_reporte') {
+                    const r1 = new TextInputBuilder().setCustomId('f_user').setLabel("Usuario a Reportar").setStyle(TextInputStyle.Short).setPlaceholder('Nombre o ID del usuario...').setRequired(true);
+                    const r2 = new TextInputBuilder().setCustomId('f_motivo').setLabel("Motivo del Reporte").setStyle(TextInputStyle.Paragraph).setPlaceholder('Explica lo sucedido detalladamente...').setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(r1), new ActionRowBuilder().addComponents(r2));
+                } else if (customId === 't_alianza') {
+                    const a1 = new TextInputBuilder().setCustomId('f_serv').setLabel("Nombre del Proyecto/Servidor").setStyle(TextInputStyle.Short).setRequired(true);
+                    const a2 = new TextInputBuilder().setCustomId('f_motivo').setLabel("Propuesta o Consulta").setStyle(TextInputStyle.Paragraph).setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(a1), new ActionRowBuilder().addComponents(a2));
+                } else {
+                    const g1 = new TextInputBuilder().setCustomId('f_roblox').setLabel("Tu Usuario de Roblox").setStyle(TextInputStyle.Short).setRequired(true);
+                    const g2 = new TextInputBuilder().setCustomId('f_motivo').setLabel("Motivo de Creación").setStyle(TextInputStyle.Paragraph).setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(g1), new ActionRowBuilder().addComponents(g2));
+                }
+
+                return await interaction.showModal(modal);
+            } catch (err) {
+                console.error("Error al abrir modal:", err);
             }
-            return await interaction.showModal(modal);
         }
 
-        // --- 2. CREACIÓN (LOGS ESTILO TICKET KING) ---
+        // 2. PROCESAMIENTO DE CREACIÓN (SUBMIT)
         if (interaction.isModalSubmit() && customId.startsWith('modal_t_')) {
-            await interaction.deferReply({ ephemeral: true });
-            try {
-                const ticketId = await getNextTicketId();
-                const type = customId.replace('modal_t_', '');
-                const configs = {
-                    general: { cat: '1489831086065324093', role: '1476800914818859018', name: 'Soporte General' },
-                    reporte: { cat: '1489831182563672075', role: '1476800914818859018', name: 'Reporte' },
-                    vip: { cat: '1489831182563672075', role: '1476767461024989326', name: 'Atención VIP' },
-                    alianza: { cat: '1489831357357232218', role: '1476767863636234487', name: 'Alianza' }
-                };
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
 
-                const channel = await guild.channels.create({
+            try {
+                const type = customId.replace('modal_t_', '');
+                const ticketId = await getNextTicketId();
+                const config = configs[type];
+
+                // Crear canal de texto
+                const ticketChannel = await guild.channels.create({
                     name: `ticket-${ticketId}`,
                     type: ChannelType.GuildText,
-                    parent: configs[type].cat,
+                    parent: config.cat,
+                    topic: `Ticket de ${config.name} | Creado por ${user.tag}`,
                     permissionOverwrites: [
                         { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                         { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
-                        { id: configs[type].role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+                        { id: config.role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
                     ]
                 });
 
-                // Embed dentro del ticket
-                const ticketEmbed = new EmbedBuilder()
+                // Embed de Bienvenida dentro del ticket
+                const welcomeEmbed = new EmbedBuilder()
                     .setColor('#e1ff00')
-                    .setTitle('🎫 Nuevo Ticket Abierto')
-                    .setAuthor({ name: 'Anda RP - Soporte', iconURL: 'attachment://LogoPFP.png' })
-                    .addFields(
-                        { name: '👤 Usuario', value: `<@${user.id}>`, inline: true },
-                        { name: '📂 Categoría', value: configs[type].name, inline: true },
-                        { name: '🆔 ID Ticket', value: `#${ticketId}`, inline: true }
-                    );
+                    .setTitle(`🎫 Ticket de Soporte #${ticketId}`)
+                    .setAuthor({ name: 'Anda RP', iconURL: 'attachment://LogoPFP.png' })
+                    .setDescription(`Hola <@${user.id}>, gracias por contactar con el soporte de **Anda RP**.\nPor favor, espera a que un miembro del Staff te asista.`)
+                    .setTimestamp();
 
-                interaction.fields.fields.forEach(f => {
-                    ticketEmbed.addFields({ name: `🔹 ${f.customId.replace('modal_', '').toUpperCase()}`, value: `\`\`\`${f.value}\`\`\`` });
+                // Añadir campos del modal dinámicamente
+                interaction.fields.fields.forEach(field => {
+                    const name = field.customId.replace('f_', '').toUpperCase();
+                    welcomeEmbed.addFields({ name: `🔹 ${name}`, value: `\`\`\`${field.value}\`\`\`` });
                 });
 
-                const btns = new ActionRowBuilder().addComponents(
+                const actionButtons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('ticket_reclamar').setLabel('Reclamar').setEmoji('📌').setStyle(ButtonStyle.Success),
                     new ButtonBuilder().setCustomId('ticket_ascender').setLabel('Ascender').setEmoji('🚀').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+                    new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger)
                 );
 
-                await channel.send({ content: `<@${user.id}> | <@&${configs[type].role}>`, embeds: [ticketEmbed], components: [btns], files: ['./attachment/LogoPFP.png'] });
+                await ticketChannel.send({ 
+                    content: `<@${user.id}> | <@&${config.role}>`, 
+                    embeds: [welcomeEmbed], 
+                    components: [actionButtons],
+                    files: ['./attachment/LogoPFP.png']
+                });
 
                 // --- LOG DE APERTURA (ESTILO IMAGEN) ---
-                const logChan = guild.channels.cache.get('1476799509207060551');
-                if (logChan) {
+                const logs = guild.channels.cache.get(logChannelId);
+                if (logs) {
                     const openLog = new EmbedBuilder()
-                        .setColor('#00ff44')
-                        .setTitle('✨ Ticket Abierto')
+                        .setColor('#2b2d31')
+                        .setTitle('Ticket Abierto')
                         .addFields(
-                            { name: 'Nombre del Ticket', value: `${channel.name}`, inline: true },
+                            { name: 'Nombre del Ticket', value: `<#${ticketChannel.id}>`, inline: true },
                             { name: 'Creado por', value: `<@${user.id}>`, inline: true },
                             { name: 'Opened Date', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
-                            { name: 'Ticket Type', value: configs[type].name, inline: false }
+                            { name: 'Ticket Type', value: config.name, inline: false }
                         );
-                    await logChan.send({ embeds: [openLog] });
+                    await logs.send({ embeds: [openLog] });
                 }
 
-                await interaction.editReply(`✅ Ticket creado: ${channel}`);
-            } catch (error) { await interaction.editReply(`❌ Error: ${error.message}`); }
-        }
+                await interaction.editReply(`✅ **Tu ticket ha sido creado:** ${ticketChannel}`);
 
-        // --- 3. ACCIONES ---
-        if (customId === 'ticket_reclamar') {
-            await interaction.channel.permissionOverwrites.edit(user.id, { SendMessages: true, ViewChannel: true });
-            const embed = new EmbedBuilder().setColor('#00ff44').setDescription(`👋 **Ticket reclamado por ${user}.** En breve serás atendido.`);
-            await interaction.reply({ embeds: [embed] });
-        }
-
-        if (customId === 'ticket_ascender') {
-            const highStaff = '1476767461024989326'; // ID de Staff Superior
-            const fields = interaction.message.embeds[0].fields;
-            const userTicket = fields.find(f => f.name === '👤 Usuario')?.value || 'Desconocido';
-            const motivo = fields.find(f => f.name.includes('MOTIVO'))?.value || 'Sin detalles';
-
-            const embedAscenso = new EmbedBuilder()
-                .setColor('#ff9900')
-                .setTitle('🚀 Ticket Ascendido')
-                .addFields(
-                    { name: '⏫ Ticket Ascendido a:', value: `<@&${highStaff}>` },
-                    { name: '👤 Persona que solicita:', value: `<@${user.id}>` },
-                    { name: '📝 Resumen del ticket:', value: `Usuario: ${userTicket}\nMotivo: ${motivo}` }
-                )
-                .setTimestamp();
-
-            await interaction.reply({ content: `<@&${highStaff}>`, embeds: [embedAscenso] });
-        }
-
-        if (customId === 'ticket_cerrar') {
-            const modalC = new ModalBuilder().setCustomId('modal_cerrar_def').setTitle('🔒 Cierre de Ticket');
-            const mot = new TextInputBuilder().setCustomId('m_c').setLabel("Razón del cierre").setStyle(TextInputStyle.Short).setRequired(true);
-            modalC.addComponents(new ActionRowBuilder().addComponents(mot));
-            return interaction.showModal(modalC);
-        }
-
-        if (customId === 'modal_cerrar_def') {
-            const razon = interaction.fields.getTextInputValue('m_c');
-            const logChan = guild.channels.cache.get('1476799509207060551');
-
-            if (logChan) {
-                const closeLog = new EmbedBuilder()
-                    .setColor('#ff0000')
-                    .setTitle('🔒 Ticket Cerrado')
-                    .addFields(
-                        { name: 'Nombre del Ticket', value: `\`${interaction.channel.name}\``, inline: true },
-                        { name: 'Autor del Ticket', value: `\`N/A\``, inline: true }, // Aquí podrías jalar la data de la DB si guardas el autor
-                        { name: 'Cerrado por', value: `<@${user.id}>`, inline: true },
-                        { name: 'Razón de cierre', value: `\`\`\`${razon}\`\`\`` }
-                    )
-                    .setFooter({ text: `Finalizado • ${interaction.channel.name}` })
-                    .setTimestamp();
-                await logChan.send({ embeds: [closeLog] });
+            } catch (err) {
+                console.error("Error en creación de ticket:", err);
+                await interaction.editReply("❌ Hubo un error crítico al intentar crear el canal.");
             }
+        }
 
-            await interaction.reply({ embeds: [new EmbedBuilder().setColor('#ff0000').setDescription('⌛ El ticket se cerrará en 5 segundos...')] });
-            setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+        // 3. ACCIÓN: RECLAMAR
+        if (customId === 'ticket_reclamar') {
+            try {
+                const claimEmbed = new EmbedBuilder()
+                    .setColor('#57f287')
+                    .setDescription(`📌 **Ticket reclamado por ${user}**\nEste miembro del Staff se encargará de tu caso.`);
+                
+                await interaction.reply({ embeds: [claimEmbed] });
+                
+                // Log de reclamo
+                const logs = guild.channels.cache.get(logChannelId);
+                if (logs) logs.send({ content: `📌 **${user.tag}** reclamó el ticket \`${channel.name}\`` }).catch(() => {});
+            } catch (e) { console.error(e); }
+        }
+
+        // 4. ACCIÓN: ASCENDER (DETALLADO)
+        if (customId === 'ticket_ascender') {
+            try {
+                const originalEmbed = interaction.message.embeds[0];
+                const fieldsData = originalEmbed.fields.map(f => `**${f.name}:** ${f.value}`).join('\n') || "Sin datos previos.";
+
+                const ascEmbed = new EmbedBuilder()
+                    .setColor('#ff9900')
+                    .setTitle('🚀 Solicitud de Ascenso de Ticket')
+                    .setThumbnail(user.displayAvatarURL())
+                    .addFields(
+                        { name: '⏫ Ticket Ascendido a:', value: `<@&${superiorRoleId}>`, inline: true },
+                        { name: '👤 Persona que solicita:', value: `<@${user.id}>`, inline: true },
+                        { name: '📝 Resumen del ticket:', value: fieldsData }
+                    )
+                    .setFooter({ text: 'Se requiere atención de un rango superior.' })
+                    .setTimestamp();
+
+                await interaction.reply({ content: `⚠️ <@&${superiorRoleId}>`, embeds: [ascEmbed] });
+            } catch (e) { console.error(e); }
+        }
+
+        // 5. ACCIÓN: CERRAR (CON CONTEO DE MENSAJES)
+        if (customId === 'ticket_cerrar') {
+            const modal = new ModalBuilder().setCustomId('modal_close_final').setTitle('🔒 Cierre de Ticket');
+            const input = new TextInputBuilder().setCustomId('razon_txt').setLabel("Razón del cierre").setStyle(TextInputStyle.Paragraph).setRequired(true).setPlaceholder('Escribe aquí el motivo del cierre...');
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+            return await interaction.showModal(modal);
+        }
+
+        // 6. PROCESAMIENTO CIERRE FINAL (LOGS ESTILO IMAGEN)
+        if (interaction.isModalSubmit() && customId === 'modal_close_final') {
+            await interaction.deferReply();
+            const razon = interaction.fields.getTextInputValue('razon_txt');
+            const logs = guild.channels.cache.get(logChannelId);
+
+            try {
+                // Obtener mensajes para el conteo (como en la foto)
+                const messages = await channel.messages.fetch({ limit: 100 });
+                const staffMessages = messages.filter(m => !m.author.bot && m.member.permissions.has(PermissionFlagsBits.ManageMessages));
+                
+                // Agrupar mensajes por staff para el conteo
+                const stats = {};
+                staffMessages.forEach(m => {
+                    stats[m.author.id] = (stats[m.author.id] || 0) + 1;
+                });
+
+                const statsString = Object.entries(stats)
+                    .map(([id, count]) => `[ ${count} ] - <@${id}>`)
+                    .join('\n') || "[ 0 ] - Ninguno";
+
+                if (logs) {
+                    const closeEmbed = new EmbedBuilder()
+                        .setColor('#2b2d31')
+                        .setTitle('Ticket Cerrado')
+                        .addFields(
+                            { name: 'Nombre del Ticket', value: `\`${channel.name}\``, inline: true },
+                            { name: 'Autor del Ticket', value: `\`Solicitante\``, inline: true },
+                            { name: 'Cerrado por', value: `<@${user.id}>`, inline: true },
+                            { name: 'Fecha de Apertura', value: `\`${channel.createdAt.toLocaleDateString()}\``, inline: true },
+                            { name: 'Fecha de Cierre', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true },
+                            { name: 'Razón de cierre del ticket', value: `\`\`\`${razon}\`\`\`` },
+                            { name: 'Número de mensajes del equipo de soporte', value: statsString }
+                        )
+                        .setFooter({ text: 'Finalizado' });
+
+                    await logs.send({ embeds: [closeEmbed] });
+                }
+
+                await interaction.editReply({ embeds: [new EmbedBuilder().setColor('#ed4245').setDescription('🔒 **El ticket se eliminará en 10 segundos.**\nSe ha enviado el log correspondiente.')] });
+                
+                setTimeout(() => channel.delete().catch(() => {}), 10000);
+
+            } catch (err) {
+                console.error("Error al cerrar ticket:", err);
+                await interaction.editReply("❌ Hubo un error al procesar el cierre.");
+            }
         }
     }
 };
