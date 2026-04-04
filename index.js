@@ -33,6 +33,7 @@ for (const folder of commandFolders) {
 // --- EVENTO READY ---
 client.once('ready', async () => {
     console.log(`✅ Bot Online: ${client.user.tag}`);
+
     client.user.setPresence({
         activities: [{ name: 'Anda RP 🔥', type: ActivityType.Watching }],
         status: 'online',
@@ -40,12 +41,15 @@ client.once('ready', async () => {
 
     const canalTicketsId = '1476763743424610305';
     const canalTickets = client.channels.cache.get(canalTicketsId);
+
     if (canalTickets) {
         try {
             const mensajes = await canalTickets.messages.fetch({ limit: 50 });
-            if (mensajes.size > 0) await canalTickets.bulkDelete(mensajes, true);
+            if (mensajes.size > 0) {
+                await canalTickets.bulkDelete(mensajes, true);
+            }
             await sendTicketPanel(canalTickets);
-            console.log("🎫 Canal de tickets listo.");
+            console.log("🎫 Canal de tickets limpiado y panel enviado.");
         } catch (error) {
             console.error("❌ Error en auto-panel:", error);
         }
@@ -54,7 +58,7 @@ client.once('ready', async () => {
 
 // --- MANEJO DE INTERACCIONES ---
 client.on('interactionCreate', async (interaction) => {
-    // 1️⃣ COMANDOS SLASH
+    // 1️⃣ Comandos Slash
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -66,15 +70,16 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 2️⃣ BOTONES Y MODALES
+    // 2️⃣ Botones y Modales
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // Lógica para el sistema de Apertura/Sesión
-        if (customId.startsWith('modal_setup') || 
-            customId.startsWith('vote_') || 
-            customId.startsWith('modal_resumen')) {
-            
+        // FILTRO PARA SISTEMA DE APERTURA (Sesiones)
+        const isApertura = customId.startsWith('modal_setup') || 
+                           customId.startsWith('vote_') || 
+                           customId.startsWith('modal_resumen');
+
+        if (isApertura) {
             const cmdApertura = client.commands.get('apertura');
             if (cmdApertura && cmdApertura.handleAperturaInteractions) {
                 try {
@@ -85,7 +90,7 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // Lógica para Tickets (si no es de apertura, va a tickets)
+        // LÓGICA DE TICKETS (Si no es de apertura)
         try {
             await handleTicketInteractions(interaction);
         } catch (error) {
