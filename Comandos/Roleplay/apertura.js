@@ -15,10 +15,26 @@ const fs = require('fs');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('apertura')
-        .setDescription('🚀 Sistema integral de gestión de sesiones (Votaciones por reacciones).')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+        .setDescription('🚀 Sistema de gestión de sesiones (Votaciones por reacciones).'),
 
     async execute(interaction) {
+        // --- 🛡️ RESTRICCIÓN DE ROLES ---
+        const rolesPermitidos = [
+            '1476767461024989326', 
+            '1476767863636234487', 
+            '1476768334048661586', 
+            '1476768951034970253'
+        ];
+
+        const tienePermiso = interaction.member.roles.cache.some(role => rolesPermitidos.includes(role.id));
+
+        if (!tienePermiso) {
+            return interaction.reply({ 
+                content: '❌ No tienes los permisos necesarios para gestionar la apertura del servidor.', 
+                ephemeral: true 
+            });
+        }
+
         try {
             const docRef = db.collection('server_state').doc('current');
             const stateDoc = await docRef.get();
@@ -70,9 +86,8 @@ module.exports = {
         const canalLogs = guild.channels.cache.get('1482565635715109015');
         const docRef = db.collection('server_state').doc('current');
 
-        // --- MANEJO DE BOTONES DE SEGURIDAD ---
         if (customId === 'abort_action') {
-            return interaction.update({ content: '✅ Acción cancelada. No se han realizado cambios.', components: [], ephemeral: true });
+            return interaction.update({ content: '✅ Acción cancelada.', components: [], ephemeral: true });
         }
 
         if (customId === 'confirm_cancel_vote') {
@@ -86,7 +101,6 @@ module.exports = {
             return await interaction.showModal(modalCierre);
         }
 
-        // --- MANEJO DE MODALES ---
         if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
 
         try {
@@ -94,12 +108,12 @@ module.exports = {
                 const hora = fields.getTextInputValue('hora_rol');
                 const minGente = parseInt(fields.getTextInputValue('min_gente'));
 
-                if (isNaN(minGente)) return interaction.editReply({ content: "❌ Error: Debe ser un número válido." });
+                if (isNaN(minGente)) return interaction.editReply({ content: "❌ Error: Debe ser un número." });
 
                 const embedVotacion = new EmbedBuilder()
                     .setAuthor({ name: "Anda RP | Gestión de Sesiones", iconURL: guild.iconURL() })
                     .setTitle("📊 Votación de Disponibilidad")
-                    .setDescription(`Se ha propuesto una sesión de rol.\n\n**Información:**\n⏰ Hora: **${hora}**\n👥 Mínimo requerido: **${minGente} votos ✅**\n\n**¿Cómo votar?**\n✅ - Participaré\n🟨 - Entraré más tarde\n❌ - No puedo asistir`)
+                    .setDescription(`Se ha propuesto una sesión de rol.\n\n**Información:**\n⏰ Hora: **${hora}**\n👥 Mínimo requerido: **${minGente} votos ✅**\n\n**¿Cómo votar?**\n✅ - Participaré\n🟨 - Tarde\n❌ - No asistir`)
                     .setColor(0xF1C40F)
                     .setFooter({ text: "Sistema de Reacciones Activo" });
 
@@ -174,7 +188,6 @@ module.exports = {
 
                 await reaction.message.channel.send(payloadOpen);
 
-                // --- 📩 AVISO POR DM ---
                 const usuarios = await reaction.users.fetch();
                 usuarios.forEach(async (u) => {
                     if (u.bot) return;
