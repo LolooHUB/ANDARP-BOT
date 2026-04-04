@@ -10,6 +10,7 @@ const {
     AttachmentBuilder 
 } = require('discord.js');
 // Ruta ajustada para que funcione desde la carpeta Roleplay
+// Hola jejejejuju
 const { db } = require('../../Automatizaciones/firebase');
 
 module.exports = {
