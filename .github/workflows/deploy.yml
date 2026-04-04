@@ -1,29 +1,26 @@
-name: 🛠️ Anda RP - Registro y Validación
+name: 🚀 Anda RP - Deploy & Register
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub Actions
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: 📥 Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: 🟢 Configurar Node.js 20
+      - name: 🟢 Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: 🛠️ Instalar dependencias
         run: npm install
 
       - name: 🛰️ Registrar Comandos Slash
-        # Aquí inyectamos los Secrets de GitHub como variables de entorno
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
@@ -31,5 +28,5 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node deploy-commands.js
 
-      - name: ✅ Verificación Final
-        run: echo "Comandos registrados y código validado con éxito para Anda RP."
+      - name: ✅ Finalización
+        run: echo "¡Comandos registrados correctamente!"
