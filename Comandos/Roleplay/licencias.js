@@ -20,15 +20,19 @@ module.exports = {
                 .setRequired(false)),
 
     async execute(interaction) {
-        const ID_CANAL_PERMITIDO = '1490132182604316816';
+        // --- 🛡️ NUEVO CANAL ESPECÍFICO PARA LICENCIAS ---
+        const ID_CANAL_PERMITIDO = '1490132246022193264'; 
         const ID_ROL_VERIFICADO = '1476791384894865419';
 
         if (interaction.channelId !== ID_CANAL_PERMITIDO) {
-            return interaction.reply({ content: `❌ Trámite disponible únicamente en <#${ID_CANAL_PERMITIDO}>.`, ephemeral: true });
+            return interaction.reply({ 
+                content: `❌ Este trámite solo puede realizarse en el canal de Tránsito: <#${ID_CANAL_PERMITIDO}>.`, 
+                ephemeral: true 
+            });
         }
 
         if (!interaction.member.roles.cache.has(ID_ROL_VERIFICADO)) {
-            return interaction.reply({ content: '❌ Acceso denegado: Se requiere verificación.', ephemeral: true });
+            return interaction.reply({ content: '❌ Debes estar **Verificado** para acceder a este trámite.', ephemeral: true });
         }
 
         const target = interaction.options.getUser('usuario') || interaction.user;
@@ -44,30 +48,32 @@ module.exports = {
 
             const data = doc.data();
 
+            // --- MOSTRAR CARNET SI YA EXISTE ---
             if (data.licencias.conducir.estado) {
                 const embedCarnet = new EmbedBuilder()
-                    .setAuthor({ name: `SERVEI CATALÀ DE TRÀNSIT`, iconURL: interaction.guild.iconURL() })
-                    .setTitle(`🪪 PERMÍS DE CONDUCCIÓ - CLASSE ${data.licencias.conducir.tipo}`)
+                    .setAuthor({ name: `SERVICIO CATALÁN DE TRÁNSITO`, iconURL: interaction.guild.iconURL() })
+                    .setTitle(`🪪 PERMISO DE CONDUCCIÓN - CLASE ${data.licencias.conducir.tipo}`)
                     .setThumbnail(target.displayAvatarURL({ dynamic: true }))
                     .setColor(0x00A1DE)
                     .addFields(
                         { name: '👤 Titular', value: data.nombre, inline: false },
                         { name: '🆔 DNI Asociado', value: `#${data.numero_dni}`, inline: true },
-                        { name: '⭐ Punts', value: `${data.licencias.conducir.puntos} / 12`, inline: true },
-                        { name: '📅 Expedició', value: data.licencias.conducir.fecha_exp || 'No data', inline: true },
-                        { name: '⚠️ Estat', value: 'VIGENT / AUTORITZAT', inline: true }
+                        { name: '⭐ Puntos', value: `${data.licencias.conducir.puntos} / 12`, inline: true },
+                        { name: '📅 Expedición', value: data.licencias.conducir.fecha_exp || 'Sin datos', inline: true },
+                        { name: '⚠️ Estado', value: 'VIGENTE / AUTORIZADO', inline: true }
                     )
                     .setFooter({ text: `Generalitat de Catalunya - Anda RP`, iconURL: target.displayAvatarURL() });
 
                 return interaction.reply({ embeds: [embedCarnet] });
             }
 
+            // --- SOLICITAR CARNET SI NO TIENE ---
             if (isSelf) {
-                const modal = new ModalBuilder().setCustomId('modal_solicitar_licencia').setTitle('🚗 Sol·licitud de Permís');
+                const modal = new ModalBuilder().setCustomId('modal_solicitar_licencia').setTitle('🚗 Solicitud de Permiso');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('lic_tipo').setLabel("Classe de Permís (A, B, C)").setStyle(TextInputStyle.Short).setPlaceholder("B = Turismes").setMaxLength(1).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('lic_motivo').setLabel("Motiu de la sol·licitud").setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('lic_experiencia').setLabel("Anys d'experiència IC").setStyle(TextInputStyle.Short).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('lic_tipo').setLabel("Clase de Permiso (A, B, C)").setStyle(TextInputStyle.Short).setPlaceholder("B = Turismos").setMaxLength(1).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('lic_motivo').setLabel("Motivo de la solicitud").setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('lic_experiencia').setLabel("Años de experiencia IC").setStyle(TextInputStyle.Short).setRequired(true))
                 );
                 return await interaction.showModal(modal);
             } else {
@@ -76,7 +82,7 @@ module.exports = {
 
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: "❌ Error en el servidor de Trànsit.", ephemeral: true });
+            return interaction.reply({ content: "❌ Error en el servidor de Tránsito.", ephemeral: true });
         }
     },
 
@@ -85,26 +91,27 @@ module.exports = {
         const tipo = fields.getTextInputValue('lic_tipo').toUpperCase();
         const motivo = fields.getTextInputValue('lic_motivo');
         const exp = fields.getTextInputValue('lic_experiencia');
+        
         const canalRevision = guild.channels.cache.get('1490132369175351397');
 
         const embedStaff = new EmbedBuilder()
-            .setTitle("📄 Sol·licitud de Trànsit Pendenta")
+            .setTitle("📄 Solicitud de Tránsito Pendiente")
             .setColor(0xF1C40F)
             .addFields(
-                { name: '👤 Sol·licitant', value: `${user}`, inline: true },
-                { name: '📇 Classe', value: tipo, inline: true },
-                { name: '⏳ Experiència', value: exp, inline: true },
-                { name: '📝 Justificació', value: motivo }
+                { name: '👤 Solicitante', value: `${user}`, inline: true },
+                { name: '📇 Clase', value: tipo, inline: true },
+                { name: '⏳ Experiencia', value: exp, inline: true },
+                { name: '📝 Justificación', value: motivo }
             )
             .setTimestamp();
 
         const botones = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`aprobar_lic_${user.id}_${tipo}`).setLabel('Aprovar').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`aprobar_lic_${user.id}_${tipo}`).setLabel('Aprobar').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId(`denegar_lic_${user.id}`).setLabel('Denegar').setStyle(ButtonStyle.Danger)
         );
 
-        if (canalRevision) await canalRevision.send({ content: '🚨 **Nova sol·licitud de trànsit**', embeds: [embedStaff], components: [botones] });
-        return interaction.reply({ content: "✅ Sol·licitud enviada correctamente al Servei de Trànsit.", ephemeral: true });
+        if (canalRevision) await canalRevision.send({ content: '🚨 **Nueva solicitud de tránsito**', embeds: [embedStaff], components: [botones] });
+        return interaction.reply({ content: "✅ Solicitud enviada correctamente al Servicio de Tránsito.", ephemeral: true });
     },
 
     async handleButtons(interaction) {
@@ -119,11 +126,11 @@ module.exports = {
                 'licencias.conducir.fecha_exp': new Date().toLocaleDateString('es-ES'),
                 'licencias.conducir.puntos': 12
             });
-            await interaction.update({ content: `✅ Permís **Classe ${clase}** aprovat per a <@${targetId}>.`, embeds: [], components: [] });
-            try { await targetUser.send(`🚗 El teu permís de conducció **Classe ${clase}** ha estat aprovat! Consulta'l amb \`/licencia\`.`); } catch(e){}
+            await interaction.update({ content: `✅ Permiso **Clase ${clase}** aprobado para <@${targetId}>.`, embeds: [], components: [] });
+            try { await targetUser.send(`🚗 ¡Tu permiso de conducción **Clase ${clase}** ha sido aprobado! Consúltalo con \`/licencia\`.`); } catch(e){}
         } else {
-            await interaction.update({ content: `❌ Sol·licitud de <@${targetId}> denegada.`, embeds: [], components: [] });
-            try { await targetUser.send("⚠️ La teva sol·licitud de permís de conducció ha estat rebutjada."); } catch(e){}
+            await interaction.update({ content: `❌ Solicitud de <@${targetId}> denegada.`, embeds: [], components: [] });
+            try { await targetUser.send("⚠️ Tu solicitud de permiso de conducción ha sido rechazada."); } catch(e){}
         }
     }
 };

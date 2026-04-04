@@ -52,12 +52,11 @@ module.exports = {
 
             const data = doc.data();
             
-            // Lógica de visualización de licencias detalladas
             const licManejo = data.licencias.conducir.estado ? `✅ **Vigente**\n└ *Tipo:* ${data.licencias.conducir.tipo}` : "❌ **No posee**";
             const licArmas = data.licencias.armas.estado ? `✅ **Autorizado**\n└ *Rango:* ${data.licencias.armas.rango}` : "❌ **Sin licencia**";
 
             const embedDNI = new EmbedBuilder()
-                .setAuthor({ name: `MINISTERI DE L'INTERIOR - REGISTRE CIVIL`, iconURL: interaction.guild.iconURL() })
+                .setAuthor({ name: `MINISTERIO DEL INTERIOR - REGISTRO CIVIL`, iconURL: interaction.guild.iconURL() })
                 .setTitle(`🪪 DNI NÚM: ${data.numero_dni}`)
                 .setThumbnail(target.displayAvatarURL({ dynamic: true }))
                 .setColor(0xF1C40F)
@@ -85,7 +84,6 @@ module.exports = {
         const { fields, user } = interaction;
         const numDNI = Math.floor(100000000 + Math.random() * 900000000);
         
-        // ESTRUCTURA COMPLETA RECUPERADA
         const perfilCiudadano = {
             userId: user.id,
             numero_dni: numDNI,
