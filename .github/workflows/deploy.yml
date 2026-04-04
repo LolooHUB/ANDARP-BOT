@@ -25,7 +25,7 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_JSON }}
         run: node deploy-commands.js
 
       - name: ✅ Finalización
