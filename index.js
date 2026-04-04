@@ -31,9 +31,9 @@ for (const folder of commandFolders) {
     }
 }
 
-// --- EVENTO READY ---
-client.once('ready', async () => {
-    console.log(`✅ Bot Online: ${client.user.tag}`);
+// --- EVENTO READY (Actualizado a clientReady) ---
+client.once('clientReady', async (c) => {
+    console.log(`✅ Bot Online: ${c.user.tag}`);
 
     client.user.setPresence({
         activities: [{ name: 'Anda RP 🔥', type: ActivityType.Watching }],
@@ -63,19 +63,27 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
+
         try {
             await command.execute(interaction);
         } catch (error) {
-            console.error(error);
-            await interaction.reply({ content: 'Hubo un error al ejecutar el comando.', ephemeral: true });
+            console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
+            
+            // Verificamos si ya se respondió para no causar el error "already acknowledged"
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ content: 'Hubo un error interno al ejecutar este comando.', ephemeral: true });
+            } else {
+                await interaction.reply({ content: 'Hubo un error al ejecutar el comando.', ephemeral: true });
+            }
         }
+        return; // Salimos para evitar que siga a los filtros de abajo
     }
 
-    // 2️⃣ BOTONES Y MODALES (Sistemas RP)
+    // 2️⃣ BOTONES Y MODALES
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // --- SISTEMA DE APERTURA (SESIONES) ---
+        // --- SISTEMA DE APERTURA ---
         if (customId.includes('modal_setup') || customId.includes('confirm_') || customId.includes('abort_') || customId.includes('modal_resumen')) {
             const cmdApertura = client.commands.get('apertura');
             if (cmdApertura) return await cmdApertura.handleAperturaInteractions(interaction);
@@ -87,30 +95,27 @@ client.on('interactionCreate', async (interaction) => {
             if (cmdDni) return await cmdDni.handleDNIInteractions(interaction);
         }
 
-        // --- SISTEMA DE LICENCIAS (MODAL Y BOTONES STAFF) ---
+        // --- SISTEMA DE LICENCIAS ---
         if (customId === 'modal_solicitar_licencia') {
             const cmdLic = client.commands.get('licencia');
             if (cmdLic) return await cmdLic.handleLicenciaInteractions(interaction);
         }
 
-        if (customId.includes('_lic_')) { // Captura aprobar_lic_ y denegar_lic_
+        if (customId.includes('_lic_')) {
             const cmdLic = client.commands.get('licencia');
             if (cmdLic) return await cmdLic.handleButtons(interaction);
         }
 
-        // --- LÓGICA DE TICKETS (Por defecto si nada coincide) ---
+        // --- SISTEMA DE TICKETS ---
         try {
             await handleTicketInteractions(interaction);
         } catch (error) {
-            // Solo loguear si no fue manejado por los sistemas anteriores
-            if (!interaction.replied && !interaction.deferred) {
-                console.error("Error en interacción de ticket:", error);
-            }
+            console.error("Error en interacción de ticket:", error);
         }
     }
 });
 
-// --- MANEJO DE REACCIONES (Para el sistema de apertura por votos) ---
+// --- MANEJO DE REACCIONES ---
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) {
