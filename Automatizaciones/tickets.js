@@ -14,8 +14,8 @@ const { db, getNextTicketId } = require('./firebase');
 
 /**
  * 🎫 SISTEMA DE TICKETS ELITE - ANDA RP
- * Lógica avanzada de permisos, ascensos con bloqueo de seguridad y logs estilo Ticket King.
- * Versión: 3.0.1 (Full Detailing)
+ * Lógica: Nombre dinámico (Categoría + ID), Jerarquía de 10 niveles y Logs King.
+ * Versión: 4.0.0 (Ultra Detailing)
  */
 
 module.exports = {
@@ -59,22 +59,34 @@ module.exports = {
         if (!interaction.guild) return;
         const { customId, guild, member, user, channel } = interaction;
 
-        // IDs DE CONFIGURACIÓN (Actualiza según tus necesidades)
         const logChannelId = '1476799509207060551';
-        const highStaffRoleId = '1476767461024989326'; 
+
+        // --- JERARQUÍA DE MODERACIÓN (ORDENADA DE MENOR A MAYOR) ---
+        const staffHierarchy = [
+            '1476765837825277992', // Helper
+            '1476766248242118697', // Mod en pruebas
+            '1476766796861149284', // Mod
+            '1476767536530849822', // Supervision basica
+            '1476767750625038336', // Administrador
+            '1482153188856434828', // Equipo de Compras y Similares
+            '1476768019496829033', // Supervision Avanzada
+            '1476768122915782676', // Manager
+            '1476768405037125885', // Community Manager
+            '1476768951034970253'  // Fundacion
+        ];
 
         const configs = {
-            general: { cat: '1489831086065324093', role: '1476800914818859018', n: 'Soporte General', emoji: '📡' },
-            reporte: { cat: '1489831182563672075', role: '1476800914818859018', n: 'Reportes', emoji: '🚫' },
-            vip: { cat: '1489831182563672075', role: '1476767461024989326', n: 'VIP Prioritario', emoji: '🎫' },
-            alianza: { cat: '1489831357357232218', role: '1476767863636234487', n: 'Alianzas', emoji: '🤝' }
+            general: { cat: '1489831086065324093', role: staffHierarchy[0], n: 'Soporte General', prefix: 'soporte', emoji: '📡' },
+            reporte: { cat: '1489831182563672075', role: staffHierarchy[1], n: 'Reportes', prefix: 'reporte', emoji: '🚫' },
+            vip: { cat: '1489831182563672075', role: '1476767461024989326', n: 'VIP Prioritario', prefix: 'vip', emoji: '🎫' },
+            alianza: { cat: '1489831357357232218', role: '1476767863636234487', n: 'Alianzas', prefix: 'alianza', emoji: '🤝' }
         };
 
         // --- A. SOLICITUD DE MODALES ---
         if (['t_general', 't_vip', 't_reporte', 't_alianza'].includes(customId)) {
             try {
                 if (customId === 't_vip' && !member.roles.cache.has('1476765603418079434')) {
-                    return interaction.reply({ content: '❌ **Acceso Denegado:** Este canal es exclusivo para miembros con rango VIP.', ephemeral: true });
+                    return interaction.reply({ content: '❌ **Acceso Denegado:** Rango VIP requerido.', ephemeral: true });
                 }
 
                 const config = configs[customId.replace('t_', '')];
@@ -96,18 +108,12 @@ module.exports = {
                     .setPlaceholder('Describe detalladamente tu situación...')
                     .setRequired(true);
 
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(input1),
-                    new ActionRowBuilder().addComponents(input2)
-                );
-
+                modal.addComponents(new ActionRowBuilder().addComponents(input1), new ActionRowBuilder().addComponents(input2));
                 return await interaction.showModal(modal);
-            } catch (err) {
-                console.error("Error abriendo modal:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
-        // --- B. CREACIÓN DEL TICKET (SUBMIT) ---
+        // --- B. CREACIÓN DEL TICKET (CATEGORIA + ID) ---
         if (interaction.isModalSubmit() && customId.startsWith('modal_t_')) {
             await interaction.deferReply({ ephemeral: true });
             try {
@@ -116,7 +122,7 @@ module.exports = {
                 const config = configs[type];
 
                 const tChannel = await guild.channels.create({
-                    name: `ticket-${ticketId}`,
+                    name: `${config.prefix}-${ticketId}`,
                     type: ChannelType.GuildText,
                     parent: config.cat,
                     permissionOverwrites: [
@@ -128,9 +134,9 @@ module.exports = {
 
                 const welcomeEmbed = new EmbedBuilder()
                     .setColor('#e1ff00')
-                    .setTitle(`✨ Ticket de Soporte #${ticketId}`)
+                    .setTitle(`✨ Ticket de Soporte | ${config.n} #${ticketId}`)
                     .setAuthor({ name: 'Anda RP', iconURL: 'attachment://LogoPFP.png' })
-                    .setDescription(`👋 Hola <@${user.id}>, has abierto un ticket de **${config.n}**.\nUn miembro del equipo staff te atenderá en breve.`)
+                    .setDescription(`👋 Hola <@${user.id}>, un miembro del equipo de **${config.n}** te atenderá en breve.`)
                     .addFields(
                         { name: '👤 Usuario', value: `\`${user.tag}\``, inline: true },
                         { name: '🆔 ID Usuario', value: `\`${user.id}\``, inline: true }
@@ -155,7 +161,7 @@ module.exports = {
                     files: ['./attachment/LogoPFP.png']
                 });
 
-                // --- LOG DE APERTURA (TICKET KING STYLE) ---
+                // LOG APERTURA KING
                 const logChan = guild.channels.cache.get(logChannelId);
                 if (logChan) {
                     const openLog = new EmbedBuilder()
@@ -170,11 +176,8 @@ module.exports = {
                     await logChan.send({ embeds: [openLog] });
                 }
 
-                await interaction.editReply(`✅ **Ticket abierto con éxito:** ${tChannel}`);
-            } catch (err) {
-                console.error("Error creando ticket:", err);
-                await interaction.editReply("❌ Hubo un error al procesar tu solicitud.");
-            }
+                await interaction.editReply(`✅ **Ticket abierto:** ${tChannel}`);
+            } catch (err) { console.error(err); }
         }
 
         // --- C. BOTÓN: RECLAMAR ---
@@ -183,79 +186,81 @@ module.exports = {
                 const claimEmbed = new EmbedBuilder()
                     .setColor('#00ff44')
                     .setAuthor({ name: 'Gestión de Tickets', iconURL: user.displayAvatarURL() })
-                    .setDescription(`✅ **¡Ticket Reclamado!**\nEl Staff <@${user.id}> ha tomado el control del ticket y te asistirá ahora mismo.`)
+                    .setDescription(`✅ **¡Ticket Reclamado!**\nEl Staff <@${user.id}> ha tomado el control y te asistirá ahora.`)
                     .setTimestamp();
-                
                 await interaction.reply({ embeds: [claimEmbed] });
             } catch (e) { console.error(e); }
         }
 
-        // --- D. BOTÓN: ASCENDER (DETALLADO Y SEGURO) ---
+        // --- D. BOTÓN: ASCENDER (JERARQUÍA COMPLETA + BLOQUEO) ---
         if (customId === 'ticket_ascender') {
             try {
-                // 1. Bloquear permisos de escritura para el staff actual y el que apretó el botón
-                await channel.permissionOverwrites.edit(user.id, { SendMessages: false });
-                
-                // Intentar detectar el rol de staff inicial desde la mención del mensaje anterior
-                const staffMention = interaction.message.content.match(/&(\d+)>/);
-                if (staffMention) {
-                    const oldRoleId = staffMention[1];
-                    if (oldRoleId !== highStaffRoleId) {
-                        await channel.permissionOverwrites.edit(oldRoleId, { SendMessages: false });
+                // Determinar el rango actual basado en permisos existentes
+                let currentRankIndex = -1;
+                for (let i = 0; i < staffHierarchy.length; i++) {
+                    if (channel.permissionOverwrites.cache.has(staffHierarchy[i])) {
+                        currentRankIndex = i;
                     }
                 }
 
-                // 2. Dar acceso total al Staff Superior
-                await channel.permissionOverwrites.edit(highStaffRoleId, { 
+                const nextRankIndex = currentRankIndex + 1;
+
+                if (nextRankIndex >= staffHierarchy.length) {
+                    return interaction.reply({ content: '⚠️ El ticket ya alcanzó el rango máximo (**Fundación**).', ephemeral: true });
+                }
+
+                const nextRoleId = staffHierarchy[nextRankIndex];
+                const prevRoleId = currentRankIndex !== -1 ? staffHierarchy[currentRankIndex] : null;
+
+                // 1. Bloquear permisos de escritura al staff que asciende y al rango anterior
+                await channel.permissionOverwrites.edit(user.id, { SendMessages: false });
+                if (prevRoleId) await channel.permissionOverwrites.edit(prevRoleId, { SendMessages: false });
+
+                // 2. Dar acceso al siguiente rango en la jerarquía
+                await channel.permissionOverwrites.edit(nextRoleId, { 
                     ViewChannel: true, 
                     SendMessages: true, 
                     AttachFiles: true 
                 });
 
-                // 3. Crear Embed de Ascenso
-                const originalFields = interaction.message.embeds[0].fields;
-                const resume = originalFields.map(f => `**${f.name}:** ${f.value}`).join('\n');
-
+                // 3. Embed de Ascenso Estético
                 const ascEmbed = new EmbedBuilder()
                     .setColor('#ff9900')
                     .setTitle('🚀 TICKET ASCENDIDO A RANGO SUPERIOR')
-                    .setDescription('Se ha solicitado la intervención de la administración.')
+                    .setThumbnail('https://i.imgur.com/GZ5lG5X.png')
+                    .setDescription(`Se ha escalado el ticket para una revisión de mayor nivel.`)
                     .addFields(
-                        { name: '⏫ Ticket Ascendido a:', value: `<@&${highStaffRoleId}>`, inline: true },
-                        { name: '👤 Persona que solicita:', value: `<@${user.id}>`, inline: true },
-                        { name: '🔒 Seguridad:', value: 'Permisos del staff anterior revocados.', inline: false },
-                        { name: '📝 Resumen ticket:', value: resume || "No se pudo recuperar el resumen." }
+                        { name: '⏫ Ascendido a:', value: `<@&${nextRoleId}>`, inline: true },
+                        { name: '👤 Staff solicitante:', value: `<@${user.id}>`, inline: true },
+                        { name: '🔒 Seguridad:', value: 'Permisos del rango anterior revocados automáticamente.', inline: false }
                     )
-                    .setFooter({ text: 'Sistema de Gestión de Jerarquías - Anda RP' })
+                    .setFooter({ text: `Anda RP - Gestión de Escalamiento (Nivel ${nextRankIndex + 1})` })
                     .setTimestamp();
 
                 const ascRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('ticket_reclamar_asc').setLabel('Reclamar Ascenso').setEmoji('📌').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('ticket_ascender').setLabel('Ascender de Nuevo').setEmoji('🚀').setStyle(ButtonStyle.Primary), // RE-ASCENSO
                     new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger)
                 );
 
                 await interaction.reply({ 
-                    content: `⚠️ **Atención:** <@&${highStaffRoleId}>`, 
+                    content: `⚠️ **Atención:** <@&${nextRoleId}>`, 
                     embeds: [ascEmbed], 
                     components: [ascRow] 
                 });
 
-            } catch (err) {
-                console.error("Error en ascenso:", err);
-                await interaction.reply({ content: "❌ Error al intentar ascender el ticket.", ephemeral: true });
-            }
+            } catch (err) { console.error(err); }
         }
 
         // --- E. BOTÓN: CERRAR (PREPARACIÓN) ---
         if (customId === 'ticket_cerrar') {
-            const modal = new ModalBuilder().setCustomId('modal_final_close').setTitle('🔒 Cierre Definitivo');
+            const modal = new ModalBuilder().setCustomId('modal_final_close').setTitle('🔒 Cierre de Ticket');
             const input = new TextInputBuilder()
                 .setCustomId('razon_txt')
                 .setLabel("Razón del cierre")
                 .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Escribe el motivo por el cual se cierra este ticket...')
+                .setPlaceholder('Motivo del cierre...')
                 .setRequired(true);
-            
             modal.addComponents(new ActionRowBuilder().addComponents(input));
             return await interaction.showModal(modal);
         }
@@ -267,18 +272,15 @@ module.exports = {
             const logChan = guild.channels.cache.get(logChannelId);
 
             try {
-                // Conteo de mensajes profesional
                 const messages = await channel.messages.fetch({ limit: 100 });
                 const staffMsgs = messages.filter(m => !m.author.bot);
                 
                 const msgCounts = {};
-                staffMsgs.forEach(m => {
-                    msgCounts[m.author.id] = (msgCounts[m.author.id] || 0) + 1;
-                });
+                staffMsgs.forEach(m => { msgCounts[m.author.id] = (msgCounts[m.author.id] || 0) + 1; });
 
                 const statsFormatted = Object.entries(msgCounts)
                     .map(([id, count]) => `[ ${count} ] - <@${id}>`)
-                    .join('\n') || "[ 0 ] - @SinDatos";
+                    .join('\n') || "[ 0 ] - @SinSoporte";
 
                 if (logChan) {
                     const closeLog = new EmbedBuilder()
@@ -295,21 +297,14 @@ module.exports = {
                         )
                         .setFooter({ text: 'Finalizado • Anda RP Support' })
                         .setTimestamp();
-                    
                     await logChan.send({ embeds: [closeLog] });
                 }
 
-                const deleteEmbed = new EmbedBuilder()
-                    .setColor('#ed4245')
-                    .setDescription('🔒 **Finalizando Soporte...**\nEl canal será eliminado en 5 segundos. Se han guardado los logs correspondientes.')
-                    .setFooter({ text: 'Gracias por contactar con Anda RP' });
-
-                await interaction.editReply({ embeds: [deleteEmbed] });
+                await interaction.editReply({ 
+                    embeds: [new EmbedBuilder().setColor('#ed4245').setDescription('🔒 **Borrando canal en 5 segundos...**')] 
+                });
                 setTimeout(() => channel.delete().catch(() => {}), 5000);
-
-            } catch (err) {
-                console.error("Error cerrando ticket:", err);
-            }
+            } catch (err) { console.error(err); }
         }
     }
 };
