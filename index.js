@@ -1,7 +1,7 @@
-const { Client, GatewayIntentBits, Collection, ActivityType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, Collection, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const { handleTicketInteractions, sendTicketPanel } = require('./Automatizaciones/tickets');
 
 const client = new Client({
     intents: [
@@ -14,7 +14,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Carga Dinámica de Comandos
+// --- CARGA DE COMANDOS ---
 const foldersPath = path.join(__dirname, 'Comandos');
 const commandFolders = fs.readdirSync(foldersPath);
 
@@ -22,45 +22,63 @@ for (const folder of commandFolders) {
     const commandsPath = path.join(foldersPath, folder);
     const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
     for (const file of commandFiles) {
-        const command = require(path.join(commandsPath, file));
+        const filePath = path.join(commandsPath, file);
+        const command = require(filePath);
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
         }
     }
 }
 
-// Evento: Bot Listo
-client.once('ready', () => {
-    console.log(`✅ Anda RP Bot conectado como ${client.user.tag}`);
-    client.user.setActivity('Anda RP 🔥', { type: ActivityType.Watching });
-});
+// --- EVENTO READY (LIMPIEZA Y STATUS) ---
+client.once('ready', async () => {
+    console.log(`✅ Bot Online: ${client.user.tag}`);
 
-// Manejo de Comandos Slash (/)
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    // Status "Viendo"
+    client.user.setPresence({
+        activities: [{ name: 'Anda RP 🔥', type: ActivityType.Watching }],
+        status: 'online',
+    });
 
-    try {
-        await command.execute(interaction);
-    } catch (error) {
-        console.error(error);
-        await interaction.reply({ content: 'Hubo un error al ejecutar este comando.', ephemeral: true });
+    // Auto-Limpieza y Envío de Panel de Tickets
+    const canalTicketsId = '1476763743424610305';
+    const canalTickets = client.channels.cache.get(canalTicketsId);
+
+    if (canalTickets) {
+        try {
+            const mensajes = await canalTickets.messages.fetch({ limit: 50 });
+            if (mensajes.size > 0) {
+                await canalTickets.bulkDelete(mensajes, true);
+            }
+            await sendTicketPanel(canalTickets);
+            console.log("🎫 Canal de tickets limpiado y panel enviado.");
+        } catch (error) {
+            console.error("❌ Error en auto-panel:", error);
+        }
     }
 });
 
-// Manejo de Interacciones de Mensajes (!)
-const { handlePrefixCommands } = require('./Interacciones/mensajes');
-client.on('messageCreate', async message => {
-    if (message.author.bot) return;
-    await handlePrefixCommands(message);
-});
+// --- MANEJO DE INTERACCIONES (COMANDOS Y TICKETS) ---
+client.on('interactionCreate', async (interaction) => {
+    // Si es un comando Slash
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+        try {
+            await command.execute(interaction);
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'Hubo un error al ejecutar el comando.', ephemeral: true });
+        }
+    }
 
-// Manejo de Botones y Modales (Tickets e Interacciones)
-const { handleTicketInteractions } = require('./Automatizaciones/tickets');
-client.on('interactionCreate', async interaction => {
+    // Si es un botón o modal (Tickets)
     if (interaction.isButton() || interaction.isModalSubmit()) {
-        await handleTicketInteractions(interaction);
+        try {
+            await handleTicketInteractions(interaction);
+        } catch (error) {
+            console.error("Error en interacción de ticket:", error);
+        }
     }
 });
 
