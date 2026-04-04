@@ -32,7 +32,7 @@ for (const folder of commandFolders) {
 // Evento: Bot Listo
 client.once('ready', () => {
     console.log(`✅ Anda RP Bot conectado como ${client.user.tag}`);
-    client.user.setActivity('Viendo Anda RP', { type: ActivityType.Watching });
+    client.user.setActivity('Anda RP 🔥', { type: ActivityType.Watching });
 });
 
 // Manejo de Comandos Slash (/)

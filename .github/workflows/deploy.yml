@@ -1,12 +1,17 @@
-name: 🚀 Anda RP - Deploy & Register
+name: 🚀 Anda RP - Fake Hosting 24/7
 
 on:
   push:
     branches: [ "main" ]
+  schedule:
+    - cron: '0 */6 * * *' # Se ejecuta cada 6 horas exactas
+  workflow_dispatch:
 
 jobs:
-  build:
+  run-bot:
     runs-on: ubuntu-latest
+    # El tiempo máximo de un job en GitHub es de 360 minutos (6 horas)
+    timeout-minutes: 355 
 
     steps:
       - name: 📥 Clonar repositorio
@@ -20,13 +25,14 @@ jobs:
       - name: 🛠️ Instalar dependencias
         run: npm install
 
-      - name: 🛰️ Registrar Comandos Slash
+      - name: 🛰️ Registrar Comandos y Encender Bot
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           IMGUR_CLIENT_ID: ${{ secrets.IMGUR_CLIENT_ID }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_JSON }}
-        run: node deploy-commands.js
-
-      - name: ✅ Finalización
-        run: echo "¡Comandos registrados correctamente!"
+        # Ejecutamos el registro y luego el bot EN EL MISMO PASO
+        # El bot mantendrá el proceso "vivo" hasta que GitHub lo mate a las 6hs
+        run: |
+          node deploy-commands.js
+          node index.js
