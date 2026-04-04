@@ -59,7 +59,7 @@ client.once('ready', async () => {
 
 // --- MANEJO DE INTERACCIONES ---
 client.on('interactionCreate', async (interaction) => {
-    // 1️⃣ Comandos Slash
+    // 1️⃣ COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -71,32 +71,55 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 2️⃣ Botones y Modales
+    // 2️⃣ BOTONES Y MODALES (Sistemas RP)
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // FILTRO PARA SISTEMA DE APERTURA (Sesiones)
-        const isApertura = customId.startsWith('modal_setup') || 
-                           customId.startsWith('vote_') || 
-                           customId.startsWith('modal_resumen');
-
-        if (isApertura) {
+        // --- SISTEMA DE APERTURA (SESIONES) ---
+        if (customId.includes('modal_setup') || customId.includes('confirm_') || customId.includes('abort_') || customId.includes('modal_resumen')) {
             const cmdApertura = client.commands.get('apertura');
-            if (cmdApertura && cmdApertura.handleAperturaInteractions) {
-                try {
-                    return await cmdApertura.handleAperturaInteractions(interaction);
-                } catch (error) {
-                    console.error("Error en handleAperturaInteractions:", error);
-                }
-            }
+            if (cmdApertura) return await cmdApertura.handleAperturaInteractions(interaction);
         }
 
-        // LÓGICA DE TICKETS (Si no es de apertura)
+        // --- SISTEMA DE DNI ---
+        if (customId === 'modal_crear_dni') {
+            const cmdDni = client.commands.get('dni');
+            if (cmdDni) return await cmdDni.handleDNIInteractions(interaction);
+        }
+
+        // --- SISTEMA DE LICENCIAS (MODAL Y BOTONES STAFF) ---
+        if (customId === 'modal_solicitar_licencia') {
+            const cmdLic = client.commands.get('licencia');
+            if (cmdLic) return await cmdLic.handleLicenciaInteractions(interaction);
+        }
+
+        if (customId.includes('_lic_')) { // Captura aprobar_lic_ y denegar_lic_
+            const cmdLic = client.commands.get('licencia');
+            if (cmdLic) return await cmdLic.handleButtons(interaction);
+        }
+
+        // --- LÓGICA DE TICKETS (Por defecto si nada coincide) ---
         try {
             await handleTicketInteractions(interaction);
         } catch (error) {
-            console.error("Error en interacción de ticket:", error);
+            // Solo loguear si no fue manejado por los sistemas anteriores
+            if (!interaction.replied && !interaction.deferred) {
+                console.error("Error en interacción de ticket:", error);
+            }
         }
+    }
+});
+
+// --- MANEJO DE REACCIONES (Para el sistema de apertura por votos) ---
+client.on('messageReactionAdd', async (reaction, user) => {
+    if (user.bot) return;
+    if (reaction.partial) {
+        try { await reaction.fetch(); } catch (e) { return; }
+    }
+    
+    const cmdApertura = client.commands.get('apertura');
+    if (cmdApertura && cmdApertura.handleReactions) {
+        await cmdApertura.handleReactions(reaction, user);
     }
 });
 
