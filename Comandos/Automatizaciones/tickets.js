@@ -8,14 +8,15 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    Collection
+    Collection,
+    AttachmentBuilder
 } = require('discord.js');
 const { db, getNextTicketId } = require('./firebase');
+const transcripts = require('discord-html-transcripts'); // No olvides: npm install discord-html-transcripts
 
 /**
  * 🎫 SISTEMA DE TICKETS ELITE - ANDA RP
- * Lógica: Nombre dinámico (Categoría + ID), Jerarquía de 10 niveles y Logs King.
- * Versión: 6.5.0 (Full Integration + New Modals)
+ * Lógica: Nombre dinámico (Categoría + ID), Jerarquía de 10 niveles y Logs King + Transcripción PDF.
  */
 
 module.exports = {
@@ -105,7 +106,6 @@ module.exports = {
                     .setCustomId(`modal_t_${type}`)
                     .setTitle(`${config.emoji} Formulario de ${config.n}`);
 
-                // --- LÓGICA DE CAMPOS SEGÚN CATEGORÍA ---
                 if (type === 'general' || type === 'vip') {
                     modal.addComponents(
                         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_roblox').setLabel("Usuario de Roblox").setStyle(TextInputStyle.Short).setRequired(true)),
@@ -161,7 +161,6 @@ module.exports = {
                     )
                     .setTimestamp();
 
-                // Mapeo dinámico de TODOS los campos del modal al embed
                 interaction.fields.fields.forEach(f => {
                     const label = f.customId.replace('f_', '').toUpperCase().replace('_', ' ');
                     welcomeEmbed.addFields({ name: `🔹 ${label}`, value: `\`\`\`${f.value}\`\`\`` });
@@ -180,7 +179,6 @@ module.exports = {
                     files: ['./attachment/LogoPFP.png']
                 });
 
-                // --- LOG APERTURA KING ---
                 const logChan = guild.channels.cache.get(logChannelId);
                 if (logChan) {
                     const openLog = new EmbedBuilder()
@@ -216,22 +214,16 @@ module.exports = {
             } catch (e) { console.error(e); }
         }
 
-        // --- D. BOTÓN: ASCENDER (SALTO A NIVEL 3 + BLOQUEO) ---
+        // --- D. BOTÓN: ASCENDER ---
         if (customId === 'ticket_ascender') {
             try {
                 let currentRankIndex = -1;
                 for (let i = 0; i < staffHierarchy.length; i++) {
-                    if (channel.permissionOverwrites.cache.has(staffHierarchy[i])) {
-                        currentRankIndex = i;
-                    }
+                    if (channel.permissionOverwrites.cache.has(staffHierarchy[i])) currentRankIndex = i;
                 }
-
-                // Lógica de Salto: Si es menor a Nivel 3, salta a 3. Si ya es 3+, sube de 1 en 1.
                 let nextRankIndex = (currentRankIndex >= 0 && currentRankIndex < 3) ? 3 : currentRankIndex + 1;
 
-                if (nextRankIndex >= staffHierarchy.length) {
-                    return interaction.reply({ content: '⚠️ El ticket ya alcanzó el rango máximo.', ephemeral: true });
-                }
+                if (nextRankIndex >= staffHierarchy.length) return interaction.reply({ content: '⚠️ El ticket ya alcanzó el rango máximo.', ephemeral: true });
 
                 const nextRoleId = staffHierarchy[nextRankIndex];
                 const prevRoleId = currentRankIndex !== -1 ? staffHierarchy[currentRankIndex] : null;
@@ -248,7 +240,6 @@ module.exports = {
                         { name: '⏫ Ascendido a:', value: `<@&${nextRoleId}>`, inline: true },
                         { name: '👤 Staff solicitante:', value: `<@${user.id}>`, inline: true },
                     )
-                    .setFooter({ text: `Anda RP - Gestión de Escalamiento` })
                     .setTimestamp();
 
                 const ascRow = new ActionRowBuilder().addComponents(
@@ -279,14 +270,21 @@ module.exports = {
             return await interaction.showModal(modal);
         }
 
-        // --- F. CIERRE DEFINITIVO Y LOGS KING ---
+        // --- F. CIERRE DEFINITIVO + PDF TRANSCRIPT ---
         if (interaction.isModalSubmit() && customId === 'modal_final_close') {
             await interaction.deferReply();
             const razon = interaction.fields.getTextInputValue('razon_txt');
             const logChan = guild.channels.cache.get(logChannelId);
 
             try {
-                // Conteo de mensajes (Ticket King Style)
+                // 📄 GENERAR TRANSCRIPCIÓN PDF
+                const attachment = await transcripts.createTranscript(channel, {
+                    limit: -1,
+                    fileName: `transcript-${channel.name}.html`,
+                    saveImages: true,
+                    poweredBy: false
+                });
+
                 const messages = await channel.messages.fetch({ limit: 100 });
                 const staffMsgs = messages.filter(m => !m.author.bot);
                 
@@ -300,7 +298,7 @@ module.exports = {
                 if (logChan) {
                     const closeLog = new EmbedBuilder()
                         .setColor('#2b2d31')
-                        .setTitle('Ticket Cerrado')
+                        .setTitle('Ticket Cerrado - Transcripción King')
                         .addFields(
                             { name: 'Nombre del Ticket', value: `\`${channel.name}\``, inline: true },
                             { name: 'Cerrado por', value: `<@${user.id}>`, inline: true },
@@ -311,7 +309,8 @@ module.exports = {
                         )
                         .setFooter({ text: 'Finalizado • Anda RP Support' })
                         .setTimestamp();
-                    await logChan.send({ embeds: [closeLog] });
+                    
+                    await logChan.send({ embeds: [closeLog], files: [attachment] });
                 }
 
                 await interaction.editReply({ 
