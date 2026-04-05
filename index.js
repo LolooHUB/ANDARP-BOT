@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, ActivityType, Collection } = require('discord
 const fs = require('fs');
 const path = require('path');
 
-// --- 🎫 IMPORTACIÓN DE TICKETS ---
+// --- 🎫 IMPORTACIÓN DE TICKETS (Ruta corregida según estructura) ---
 const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Automatizaciones/tickets');
 
 const client = new Client({
@@ -24,25 +24,27 @@ const commandFolders = fs.readdirSync(foldersPath);
 
 for (const folder of commandFolders) {
     const commandsPath = path.join(foldersPath, folder);
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    for (const file of commandFiles) {
-        const filePath = path.join(commandsPath, file);
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            client.commands.set(command.data.name, command);
+    
+    // Verificamos que sea una carpeta antes de leerla
+    if (fs.lstatSync(commandsPath).isDirectory()) {
+        const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+        for (const file of commandFiles) {
+            const filePath = path.join(commandsPath, file);
+            const command = require(filePath);
+            if ('data' in command && 'execute' in command) {
+                client.commands.set(command.data.name, command);
+            }
         }
     }
 }
 
 // --- 📂 2. CARGA DE INTERACCIONES DE PREFIJO (!) ---
-// Carga archivos de la carpeta ./Interacciones en la raíz
 const interaccionesPath = path.join(__dirname, 'Interacciones');
 if (fs.existsSync(interaccionesPath)) {
     const interaccionFiles = fs.readdirSync(interaccionesPath).filter(file => file.endsWith('.js'));
     for (const file of interaccionFiles) {
         const filePath = path.join(interaccionesPath, file);
         const interaccion = require(filePath);
-        // Guardamos por nombre de archivo o propiedad específica si la tiene
         const name = file.split('.')[0]; 
         client.prefixInteractions.set(name, interaccion);
     }
@@ -81,7 +83,7 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    // 1. Caso específico: dinero-give (Buscando en la colección de comandos slash)
+    // 1. Caso específico: dinero-give
     if (commandName === 'dinero-give') {
         const cmdBanco = client.commands.get('banco');
         if (cmdBanco && cmdBanco.handleAdminGive) {
@@ -90,7 +92,6 @@ client.on('messageCreate', async (message) => {
     }
 
     // 2. Ejecución dinámica de la carpeta ./Interacciones
-    // Si tienes un archivo llamado "ayuda.js" en ./Interacciones, se ejecutará con "!ayuda"
     const interaccion = client.prefixInteractions.get(commandName);
     if (interaccion && typeof interaccion.execute === 'function') {
         try {
@@ -120,22 +121,19 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // SISTEMA DE TICKETS (Centralizado)
+        // SISTEMA DE TICKETS
         try {
             await handleTicketInteractions(interaction);
         } catch (error) {
             console.error("❌ Error en interacción de ticket:", error);
         }
 
-        // --- SISTEMAS ADICIONALES (Carga por colección) ---
-        const systems = ['apertura', 'dni', 'licencia', 'multar', 'detencion', 'vehiculo'];
-        
-        // Mapeo de prefijos de customId a nombres de comandos
-        if (customId.includes('modal_setup') || customId.includes('confirm_') || customId.includes('abort_')) {
+        // REDIRECCIÓN DINÁMICA DE SISTEMAS
+        if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
             const cmd = client.commands.get('apertura');
             if (cmd) return await cmd.handleAperturaInteractions(interaction);
         }
-        if (customId === 'modal_crear_dni') {
+        if (customId.includes('dni')) {
             const cmd = client.commands.get('dni');
             if (cmd) return await cmd.handleDNIInteractions(interaction);
         }
