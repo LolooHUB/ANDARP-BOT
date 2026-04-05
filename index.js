@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, Collection, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -13,12 +13,17 @@ const client = new Client({
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.GuildVoiceStates // Necesario para desconectar de voz en despachos
+        GatewayIntentBits.GuildVoiceStates
     ]
 });
 
 client.commands = new Collection();
 client.prefixInteractions = new Collection(); 
+
+// --- 🛡️ CONFIGURACIÓN DE SEGURIDAD (LISTA BLANCA) ---
+const SERVIDORES_PERMITIDOS = ['1475568777360969932', '1473156452674961502'];
+const CANAL_REPORTES_ID = '1476789872709865533';
+const USER_A_MENCIONAR_ID = '824811313989419018';
 
 // --- 📂 1. CARGA DE COMANDOS SLASH (/) ---
 const foldersPath = path.join(__dirname, 'Comandos');
@@ -59,9 +64,8 @@ client.once('ready', async (c) => {
         status: 'online',
     });
 
-    // --- 🕒 REVISOR DE DESPACHOS PERSISTENTES ---
     const { db } = require('./Comandos/Automatizaciones/firebase');
-    const despachoCmd = client.prefixInteractions.get('despacho'); // Busca 'despacho.js'
+    const despachoCmd = client.prefixInteractions.get('despacho');
 
     setInterval(async () => {
         const ahora = Date.now();
@@ -79,9 +83,8 @@ client.once('ready', async (c) => {
         } catch (e) {
             console.error("❌ Error en revisor de persistencia:", e);
         }
-    }, 60000); // Revisión cada 60 segundos
+    }, 60000);
 
-    // --- 🎫 PANEL DE TICKETS ---
     const canalTicketsId = '1476763743424610305';
     const canalTickets = client.channels.cache.get(canalTicketsId);
 
@@ -99,6 +102,45 @@ client.once('ready', async (c) => {
     }
 });
 
+// --- 🛡️ EVENTO DE SEGURIDAD: INGRESO A NUEVOS SERVIDORES ---
+client.on('guildCreate', async (guild) => {
+    // Si el servidor NO está en la lista blanca
+    if (!SERVIDORES_PERMITIDOS.includes(guild.id)) {
+        console.log(`🚨 Intento de ingreso no autorizado en: ${guild.name} (${guild.id})`);
+
+        const canalReportes = client.channels.cache.get(CANAL_REPORTES_ID);
+        
+        if (canalReportes) {
+            try {
+                const owner = await guild.fetchOwner();
+                const membersCount = guild.memberCount;
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('🚨 INGRESO NO AUTORIZADO DETECTADO')
+                    .setColor('#FF0000')
+                    .setThumbnail(guild.iconURL({ dynamic: true }))
+                    .addFields(
+                        { name: '🏰 Servidor', value: `${guild.name}`, inline: true },
+                        { name: '🆔 ID', value: `${guild.id}`, inline: true },
+                        { name: '👑 Dueño', value: `${owner.user.tag}`, inline: true },
+                        { name: '👥 Miembros', value: `${membersCount}`, inline: true }
+                    )
+                    .setTimestamp();
+
+                await canalReportes.send({ 
+                    content: `<@${USER_A_MENCIONAR_ID}> ¡Atención! El bot fue añadido a un servidor no autorizado.`, 
+                    embeds: [embed] 
+                });
+            } catch (err) {
+                console.error("Error enviando reporte de seguridad:", err);
+            }
+        }
+
+        // El bot abandona el servidor automáticamente
+        await guild.leave();
+    }
+});
+
 // --- 💬 MANEJO DE MENSAJES (PREFIX !) ---
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith('!')) return;
@@ -106,7 +148,6 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    // Acceso especial para dinero-give
     if (commandName === 'dinero-give') {
         const cmdBanco = client.commands.get('banco');
         if (cmdBanco && cmdBanco.handleAdminGive) {
@@ -114,9 +155,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Buscar interacción de prefijo (ej: despacho)
     const interaccion = client.prefixInteractions.get(commandName);
-    
     if (interaccion && typeof interaccion.execute === 'function') {
         try {
             await interaccion.execute(message, args, client);
@@ -128,7 +167,6 @@ client.on('messageCreate', async (message) => {
 
 // --- ⚡ MANEJO DE INTERACCIONES (SLASH, BOTONES, MODALES) ---
 client.on('interactionCreate', async (interaction) => {
-    
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -148,28 +186,23 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) {
         const { customId } = interaction;
-
         try {
             if (customId.includes('ticket') || customId.includes('modal_t_') || customId.includes('modal_final_close') || customId.includes('t_')) {
                 await handleTicketInteractions(interaction);
                 return;
             }
-
             if (customId === 'comprar_tienda') {
                 const cmd = client.commands.get('tienda');
                 if (cmd) return await cmd.handleTiendaInteractions(interaction);
             }
-
             if (customId === 'comprar_blackmarket') {
                 const cmd = client.commands.get('blackmarket');
                 if (cmd) return await cmd.handleBlackmarketInteractions(interaction);
             }
-
             if (customId === 'seleccionar_coche_matricula') {
                 const cmd = client.commands.get('cambiarmatricula');
                 if (cmd) return await cmd.handleMatriculaInteractions(interaction);
             }
-
             if (customId.includes('vehiculo') || customId.includes('_veh_') || customId === 'select_tramite_vehiculo' || customId === 'modal_registro_vehiculo') {
                 const cmd = client.commands.get('vehiculo');
                 if (cmd) {
@@ -177,12 +210,10 @@ client.on('interactionCreate', async (interaction) => {
                     return await cmd.handleVehiculoInteractions(interaction);
                 }
             }
-
             if (customId.includes('dni')) {
                 const cmd = client.commands.get('dni');
                 if (cmd) return await cmd.handleDNIInteractions(interaction);
             }
-
             if (customId.includes('licencia') || customId.includes('_lic_')) {
                 const cmd = client.commands.get('licencia');
                 if (cmd) {
@@ -190,22 +221,18 @@ client.on('interactionCreate', async (interaction) => {
                     return await cmd.handleLicenciaInteractions(interaction);
                 }
             }
-
             if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
                 const cmd = client.commands.get('apertura');
                 if (cmd) return await cmd.handleAperturaInteractions(interaction);
             }
-
             if (customId.startsWith('modal_multa_')) {
                 const cmd = client.commands.get('multar');
                 if (cmd) return await cmd.handleMultaInteractions(interaction);
             }
-
             if (customId.startsWith('modal_detencion_')) {
                 const cmd = client.commands.get('detencion');
                 if (cmd) return await cmd.handleDetencionInteractions(interaction);
             }
-
         } catch (error) {
             console.error("❌ Error en interacción:", error);
         }
@@ -215,7 +242,6 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) try { await reaction.fetch(); } catch (e) { return; }
-    
     const cmdApertura = client.commands.get('apertura');
     if (cmdApertura && cmdApertura.handleReactions) {
         await cmdApertura.handleReactions(reaction, user);
