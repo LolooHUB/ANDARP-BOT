@@ -31,8 +31,8 @@ for (const folder of commandFolders) {
     }
 }
 
-// --- EVENTO READY (Actualizado a clientReady) ---
-client.once('clientReady', async (c) => {
+// --- EVENTO READY ---
+client.once('ready', async (c) => {
     console.log(`✅ Bot Online: ${c.user.tag}`);
 
     client.user.setPresence({
@@ -68,15 +68,13 @@ client.on('interactionCreate', async (interaction) => {
             await command.execute(interaction);
         } catch (error) {
             console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
-            
-            // Verificamos si ya se respondió para no causar el error "already acknowledged"
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp({ content: 'Hubo un error interno al ejecutar este comando.', ephemeral: true });
             } else {
                 await interaction.reply({ content: 'Hubo un error al ejecutar el comando.', ephemeral: true });
             }
         }
-        return; // Salimos para evitar que siga a los filtros de abajo
+        return;
     }
 
     // 2️⃣ BOTONES Y MODALES
@@ -104,6 +102,18 @@ client.on('interactionCreate', async (interaction) => {
         if (customId.includes('_lic_')) {
             const cmdLic = client.commands.get('licencia');
             if (cmdLic) return await cmdLic.handleButtons(interaction);
+        }
+
+        // --- SISTEMA DE MULTAS ---
+        if (customId.startsWith('modal_multa_')) {
+            const cmdMultar = client.commands.get('multar');
+            if (cmdMultar) return await cmdMultar.handleMultaInteractions(interaction);
+        }
+
+        // --- SISTEMA DE DETENCIONES ---
+        if (customId.startsWith('modal_detencion_')) {
+            const cmdDetencion = client.commands.get('detencion');
+            if (cmdDetencion) return await cmdDetencion.handleDetencionInteractions(interaction);
         }
 
         // --- SISTEMA DE TICKETS ---
