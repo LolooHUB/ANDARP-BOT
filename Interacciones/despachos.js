@@ -3,7 +3,7 @@ const ms = require('ms');
 
 module.exports = {
     name: 'despacho',
-    description: 'Gestiona los roles de despacho (asignar y quitar).',
+    description: 'Gestiona los roles de despacho (asignar, quitar y desconectar voz).',
     async execute(message, args) {
         const prefix = '!';
         const commandName = message.content.slice(prefix.length).trim().split(/ +/)[0].toLowerCase();
@@ -32,26 +32,30 @@ module.exports = {
             return message.reply('❌ Error: No se encontró el rol correspondiente en el servidor.');
         }
 
-        // --- 3. LÓGICA COMANDO: !cdespacho (QUITAR ACCESO) ---
+        // --- 3. LÓGICA COMANDO: !cdespacho (QUITAR ACCESO + DESCONECTAR) ---
         if (commandName === 'cdespacho') {
             try {
-                if (!targetMember.roles.cache.has(roleId)) {
-                    return message.reply(`⚠️ El usuario ${targetMember} no tiene el rol de despacho asignado.`);
+                // Quitar rol
+                if (targetMember.roles.cache.has(roleId)) {
+                    await targetMember.roles.remove(role);
                 }
 
-                await targetMember.roles.remove(role);
+                // Desconectar de voz si está metido
+                if (targetMember.voice.channel) {
+                    await targetMember.voice.disconnect('Despacho cancelado manualmente');
+                }
 
                 const removeEmbed = new EmbedBuilder()
                     .setColor('#ff0000')
                     .setTitle('🔒 Despacho Cancelado')
-                    .setDescription(`Se ha retirado el acceso a **${role.name}** para ${targetMember}.`)
+                    .setDescription(`Se ha retirado el acceso a **${role.name}** y se ha desconectado a ${targetMember} del canal de voz.`)
                     .addFields({ name: '👤 Retirado por', value: `<@${ejecutorId}>`, inline: true })
                     .setTimestamp();
 
                 return await message.channel.send({ embeds: [removeEmbed] });
             } catch (error) {
                 console.error(error);
-                return message.reply('❌ Hubo un error al intentar quitar el rol.');
+                return message.reply('❌ Hubo un error al intentar quitar el acceso.');
             }
         }
 
@@ -75,19 +79,25 @@ module.exports = {
                         { name: '👤 Autorizado por', value: `<@${ejecutorId}>`, inline: true },
                         { name: '⏳ Duración', value: `\`${tiempoRaw}\``, inline: true }
                     )
-                    .setFooter({ text: 'El rol se removerá automáticamente.' })
+                    .setFooter({ text: 'Se quitará el rol y se desconectará de voz al finalizar.' })
                     .setTimestamp();
 
                 await message.channel.send({ embeds: [addEmbed] });
 
-                // Temporizador de remoción automática
+                // Temporizador de remoción automática + Desconexión
                 setTimeout(async () => {
                     try {
                         const memberCheck = await message.guild.members.fetch(targetMember.id).catch(() => null);
-                        // Solo lo quita si todavía lo tiene (por si se lo quitaron antes con !cdespacho)
-                        if (memberCheck && memberCheck.roles.cache.has(roleId)) {
-                            await memberCheck.roles.remove(role);
-                            console.log(`✅ Rol ${role.name} removido automáticamente tras ${tiempoRaw}.`);
+                        if (memberCheck) {
+                            // Quitar rol si lo tiene
+                            if (memberCheck.roles.cache.has(roleId)) {
+                                await memberCheck.roles.remove(role);
+                            }
+                            // Desconectar de voz si sigue ahí
+                            if (memberCheck.voice.channel) {
+                                await memberCheck.voice.disconnect('Tiempo de despacho finalizado');
+                            }
+                            console.log(`✅ Acceso finalizado para ${memberCheck.user.tag} tras ${tiempoRaw}.`);
                         }
                     } catch (err) {
                         console.error('❌ Error en remoción automática:', err);
