@@ -6,7 +6,7 @@ require('dotenv').config();
 const commands = [];
 const foldersPath = path.join(__dirname, 'Comandos');
 
-console.log('🔍 Iniciando lectura de carpetas...');
+console.log('🔍 [1/3] Leyendo archivos de comandos...');
 
 const commandFolders = fs.readdirSync(foldersPath);
 
@@ -22,16 +22,16 @@ for (const folder of commandFolders) {
         for (const file of commandFiles) {
             const filePath = path.join(commandsPath, file);
             try {
-                // Forzamos la limpieza de caché para evitar conflictos
+                // Limpiar caché para evitar que conexiones abiertas en el require bloqueen el proceso
                 delete require.cache[require.resolve(filePath)];
                 const command = require(filePath);
                 
                 if (command.data && command.execute) {
                     commands.push(command.data.toJSON());
-                    console.log(`✅ [CARGADO] ${file}`);
+                    console.log(`   ✅ Cargado: ${file}`);
                 }
             } catch (err) {
-                console.error(`❌ [ERROR] Fallo al leer ${file}: ${err.message}`);
+                console.error(`   ❌ Error en ${file}: ${err.message}`);
             }
         }
     }
@@ -44,31 +44,34 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
         const guildId = '1475568777360969932';
         const clientId = process.env.CLIENT_ID;
 
-        if (!clientId) throw new Error("Falta CLIENT_ID en el .env");
+        if (!clientId || !process.env.DISCORD_TOKEN) {
+            console.error('\n❌ ERROR: Faltan credenciales en el archivo .env');
+            process.exit(1);
+        }
 
-        console.log(`\n📡 Conectando con la API de Discord para registrar ${commands.length} comandos...`);
+        console.log(`\n📡 [2/3] Conectando con Discord API (Enviando ${commands.length} comandos)...`);
 
-        // timeout para no quedarse esperando eternamente
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000); // 15 segundos máximo
-
+        // Enviamos los comandos
         const data = await rest.put(
             Routes.applicationGuildCommands(clientId, guildId),
             { body: commands },
         );
 
-        clearTimeout(timeout);
-        console.log(`\n✨ ÉXITO: Se registraron ${data.length} comandos.`);
+        console.log(`\n✨ [3/3] ÉXITO: Se registraron ${data.length} comandos en el servidor.`);
         
-        // FORZAMOS EL CIERRE DEL PROCESO
-        console.log('🏁 Finalizando proceso...');
-        process.exit(0); 
+        // --- EL TRUCO FINAL ---
+        // Forzamos un pequeño delay y cerramos todo. 
+        // Esto "mata" cualquier conexión a Firebase que se haya abierto con los 'require'.
+        console.log('🏁 Finalizando proceso de despliegue...');
+        setTimeout(() => {
+            process.exit(0);
+        }, 1000);
 
     } catch (error) {
-        if (error.name === 'AbortError') {
-            console.error('\n❌ ERROR: La conexión con Discord tardó demasiado (Timeout).');
+        console.error('\n❌ ERROR EN EL REGISTRO:');
+        if (error.code === 50001) {
+            console.error('   Causa: El bot no tiene permiso de "application.commands" en ese servidor.');
         } else {
-            console.error('\n❌ ERROR API DISCORD:');
             console.error(error);
         }
         process.exit(1);
