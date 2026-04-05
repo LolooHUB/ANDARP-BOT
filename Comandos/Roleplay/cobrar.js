@@ -4,7 +4,7 @@ const { db } = require('../Automatizaciones/firebase');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('cobrar')
-        .setDescription('💶 Reclama tu salario diario y bonos según tu rango.'),
+        .setDescription('💶 Reclama tu salario diario, bonos acumulados o subsidio de desempleo.'),
 
     async execute(interaction) {
         const userId = interaction.user.id;
@@ -21,28 +21,33 @@ module.exports = {
 
         const ID_BONO_VIP = '1476765603418079434';
         const MONTO_VIP = 1000;
+        const SUBSIDIO_DESEMPLEO = 1000; // Regalo del estado
 
         let sueldoTotal = 0;
         let tieneTrabajo = false;
+        let detallesSueldo = [];
 
-        // Calcular sueldo base (solo el más alto si tiene varios de la lista)
+        // 1. Sumar salarios de forma ACUMULATIVA
         for (const [idRol, monto] of Object.entries(SALARIOS)) {
             if (roles.has(idRol)) {
-                if (monto > sueldoTotal) sueldoTotal = monto;
+                sueldoTotal += monto;
                 tieneTrabajo = true;
+                // Opcional: obtener nombre del rol para el embed
+                const roleName = interaction.guild.roles.cache.get(idRol)?.name || "Trabajo";
+                detallesSueldo.push(`✅ **${roleName}**: +${monto.toLocaleString()}€`);
             }
         }
 
-        // Sumar bono VIP si lo tiene
-        if (roles.has(ID_BONO_VIP)) {
-            sueldoTotal += MONTO_VIP;
+        // 2. Si no tiene ningún trabajo de la lista, aplicar subsidio
+        if (!tieneTrabajo) {
+            sueldoTotal += SUBSIDIO_DESEMPLEO;
+            detallesSueldo.push(`🆘 **Subsidio Desempleo**: +${SUBSIDIO_DESEMPLEO.toLocaleString()}€`);
         }
 
-        if (sueldoTotal === 0) {
-            return interaction.reply({ 
-                content: "❌ No tienes asignado ningún rol con salario ni beneficios VIP.", 
-                ephemeral: true 
-            });
+        // 3. Sumar bono VIP si lo tiene
+        if (roles.has(ID_BONO_VIP)) {
+            sueldoTotal += MONTO_VIP;
+            detallesSueldo.push(`⭐ **Bono VIP**: +${MONTO_VIP.toLocaleString()}€`);
         }
 
         try {
@@ -55,7 +60,7 @@ module.exports = {
 
             const data = doc.data();
             const ahora = Date.now();
-            const unDia = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
+            const unDia = 24 * 60 * 60 * 1000;
 
             // --- VALIDACIÓN DE COOLDOWN ---
             if (data.ultimo_cobro && (ahora - data.ultimo_cobro < unDia)) {
@@ -77,23 +82,23 @@ module.exports = {
             });
 
             const embed = new EmbedBuilder()
-                .setAuthor({ name: 'TESORERÍA DE LA GENERALITAT', iconURL: 'https://i.imgur.com/vH8vL4S.png' })
-                .setTitle('🏦 Nómina Ingresada')
-                .setColor(0x2ECC71)
-                .setDescription(`Se ha procesado el pago de tus haberes diarios.`)
+                .setAuthor({ name: 'DEPARTAMENT D\'ECONOMIA I HISENDA', iconURL: 'https://i.imgur.com/vH8vL4S.png' })
+                .setTitle('🏦 Ingreso de Haberes Realizado')
+                .setColor(tieneTrabajo ? 0x2ECC71 : 0x3498DB) // Verde si trabaja, azul si es subsidio
+                .setDescription(`Se han depositado los fondos correspondientes a su actividad diaria en su cuenta corriente.`)
                 .addFields(
                     { name: '💰 Total Recibido', value: `**${sueldoTotal.toLocaleString()}€**`, inline: true },
                     { name: '📊 Nuevo Balance', value: `${nuevoSaldo.toLocaleString()}€`, inline: true },
-                    { name: '🎗️ Beneficios', value: roles.has(ID_BONO_VIP) ? 'Sueldo Base + Bono VIP ✅' : 'Sueldo Base ✅', inline: false }
+                    { name: '📝 Desglose de nómina', value: detallesSueldo.join('\n'), inline: false }
                 )
-                .setFooter({ text: 'Generalitat de Catalunya - Pagos de Función Pública' })
+                .setFooter({ text: 'Generalitat de Catalunya - Red de Tesorería Automática' })
                 .setTimestamp();
 
-            return interaction.reply({ embeds: [embed], ephemeral: false });
+            return interaction.reply({ embeds: [embed] });
 
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: "❌ Error al procesar el pago en el sistema central.", ephemeral: true });
+            return interaction.reply({ content: "❌ Error al conectar con la base de datos de la Generalitat.", ephemeral: true });
         }
     }
 };
