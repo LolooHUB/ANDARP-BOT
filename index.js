@@ -128,7 +128,7 @@ client.on('interactionCreate', async (interaction) => {
             console.error("❌ Error en interacción de ticket:", error);
         }
 
-        // REDIRECCIÓN DINÁMICA DE SISTEMAS
+        // REDIRECCIÓN DINÁMICA DE SISTEMAS (Modales y Botones)
         if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
             const cmd = client.commands.get('apertura');
             if (cmd) return await cmd.handleAperturaInteractions(interaction);

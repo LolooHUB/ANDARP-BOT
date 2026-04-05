@@ -123,7 +123,7 @@ module.exports = {
                         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_solicitante').setLabel("Nombre usuario Solicitante").setStyle(TextInputStyle.Short).setRequired(true)),
                         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_rol').setLabel("Rol del solicitante dentro del servidor").setStyle(TextInputStyle.Short).setRequired(true)),
                         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_desc').setLabel("Descripción del servidor").setStyle(TextInputStyle.Paragraph).setRequired(true)),
-                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_invitacion').setLabel("Invitación").setStyle(TextInputStyle.Short).setRequired(true))
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_invitacion').setLabel("Link de Invitación").setStyle(TextInputStyle.Short).setRequired(true))
                     );
                 }
 
@@ -242,14 +242,13 @@ module.exports = {
 
                 const ascEmbed = new EmbedBuilder()
                     .setColor('#ff9900')
-                    .setTitle('🚀 TICKET ASCENDIDO A RANGO SUPERIOR')
+                    .setTitle('🚀 TICKET ASCENDIDO')
                     .setDescription(`Se ha escalado el ticket para una revisión de mayor nivel.`)
                     .addFields(
                         { name: '⏫ Ascendido a:', value: `<@&${nextRoleId}>`, inline: true },
                         { name: '👤 Staff solicitante:', value: `<@${user.id}>`, inline: true },
-                        { name: '🔒 Seguridad:', value: 'Permisos del rango anterior revocados automáticamente.', inline: false }
                     )
-                    .setFooter({ text: `Anda RP - Gestión de Escalamiento (Nivel ${nextRankIndex + 1})` })
+                    .setFooter({ text: `Anda RP - Gestión de Escalamiento` })
                     .setTimestamp();
 
                 const ascRow = new ActionRowBuilder().addComponents(
