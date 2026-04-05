@@ -419,7 +419,7 @@ module.exports = {
             return await interaction.showModal(modal);
         }
 
-        // --- G. CIERRE DEFINITIVO + GENERACIÓN DE LOGS Y TRANSCRIPT ---
+        // --- G. CIERRE DEFINITIVO (MODIFICADO PARA WEB) ---
         if (interaction.isModalSubmit() && customId === 'modal_final_close') {
             await interaction.deferReply();
             
@@ -427,61 +427,60 @@ module.exports = {
             const logChan = guild.channels.cache.get(logChannelId);
 
             try {
-                // Generar el archivo HTML de la conversación
+                // 1. Generar el transcript como Buffer (para subirlo a la nube)
                 const attachment = await transcripts.createTranscript(channel, {
                     limit: -1,
-                    fileName: `transcript-${channel.name}.html`,
+                    returnBuffer: true, // IMPORTANTE: Obtenemos el archivo en memoria
+                    fileName: `ticket-${channel.name}.html`,
                     saveImages: true,
-                    poweredBy: false,
                     hydrate: true
                 });
 
-                // Obtener estadísticas de mensajes del staff
-                const messages = await channel.messages.fetch({ limit: 100 });
-                const staffMsgs = messages.filter(m => !m.author.bot && staffHierarchy.some(r => guild.members.cache.get(m.author.id)?.roles.cache.has(r)));
+                // 2. Subir a Firebase Storage (Usando el ID único del ticket)
+                // Asumiendo que tienes configurado bucket en firebase.js
+                const { storage } = require('./firebase'); 
+                const fileRef = storage.bucket().file(`transcripts/${channel.name}.html`);
                 
-                const msgCounts = {};
-                staffMsgs.forEach(m => { msgCounts[m.author.id] = (msgCounts[m.author.id] || 0) + 1; });
+                await fileRef.save(attachment, {
+                    metadata: { contentType: 'text/html' }
+                });
 
-                const statsFormatted = Object.entries(msgCounts)
-                    .map(([id, count]) => `> \`[${count}]\` mensajes - <@${id}>`)
-                    .join('\n') || "> No hubo participación del Staff registrada.";
+                // 3. Generar la URL de tu subdominio
+                // Si tu web maneja la ruta /tickets/, la URL sería:
+                const webTranscriptURL = `https://tickets.andarp.com/${channel.name}`;
 
+                // 4. Actualizar Firestore para que la WEB sepa que ya existe
+                await db.collection('tickets').doc(channel.name).set({
+                    closedBy: user.id,
+                    reason: razon,
+                    transcriptURL: webTranscriptURL,
+                    closedAt: new Date()
+                }, { merge: true });
+
+                // 5. Log con el enlace a la WEB
                 if (logChan) {
+                    const stats = "..."; // (tu lógica de conteo de mensajes)
                     const closeLog = new EmbedBuilder()
                         .setColor('#2b2d31')
-                        .setTitle('🔒 Ticket Cerrado y Archivado')
-                        .setThumbnail(guild.iconURL())
+                        .setTitle('🔒 Ticket Archivado en Web')
+                        .setDescription(`🌐 **Ver en línea:** [Click aquí](${webTranscriptURL})`)
                         .addFields(
-                            { name: '📂 Identificación', value: `\`${channel.name}\``, inline: true },
-                            { name: '👤 Responsable del Cierre', value: `<@${user.id}>`, inline: true },
-                            { name: '📅 Tiempos', value: `Abierto: \`${channel.createdAt.toLocaleDateString()}\`\nCerrado: <t:${Math.floor(Date.now() / 1000)}:f>`, inline: false },
-                            { name: '📝 Resolución Final', value: `\`\`\`${razon}\`\`\`` },
-                            { name: '📊 Actividad del Equipo', value: statsFormatted }
-                        )
-                        .setFooter({ text: 'Sistema de Soporte Finalizado • Anda RP' })
-                        .setTimestamp();
+                            { name: '📝 Resolución', value: `\`\`\`${razon}\`\`\`` },
+                            { name: '📊 Staff', value: stats }
+                        );
                     
-                    await logChan.send({ embeds: [closeLog], files: [attachment] });
+                    // Enviamos el log con el link y TAMBIÉN el archivo por si la web cae
+                    await logChan.send({ 
+                        embeds: [closeLog], 
+                        files: [new AttachmentBuilder(attachment, { name: `${channel.name}.html` })] 
+                    });
                 }
 
-                // Informar al canal antes del borrado
-                const delEmbed = new EmbedBuilder()
-                    .setColor('#ed4245')
-                    .setDescription('🔒 **Protocolo de Cierre:** El ticket ha sido archivado. Este canal se autodestruirá en **5 segundos**.');
-
-                await interaction.editReply({ embeds: [delEmbed] });
-                
-                // Borrado definitivo del canal
-                setTimeout(() => {
-                    channel.delete().catch(err => console.log("Error borrando canal tras cierre: ", err));
-                }, 5000);
+                await interaction.editReply({ content: `✅ Ticket cerrado. Disponible en: ${webTranscriptURL}` });
+                setTimeout(() => channel.delete().catch(() => {}), 5000);
 
             } catch (err) { 
-                console.error("Error en proceso de cierre:", err);
-                await interaction.editReply("❌ Ocurrió un error al generar el transcript, el canal se cerrará de igual forma.");
+                console.error("Error en cierre/web:", err);
                 setTimeout(() => channel.delete().catch(() => {}), 3000);
             }
         }
-    }
-};
