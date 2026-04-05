@@ -8,7 +8,7 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    Collection,
+    Collection, 
     AttachmentBuilder
 } = require('discord.js');
 const { db, getNextTicketId } = require('./firebase');
@@ -421,26 +421,36 @@ module.exports = {
 
 // --- G. CIERRE DEFINITIVO + GENERACIÓN DE LOGS, WEB Y DM ---
         if (interaction.isModalSubmit() && customId === 'modal_final_close') {
-            await interaction.deferReply();
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply();
             
             const razon = interaction.fields.getTextInputValue('razon_txt');
             const logChan = guild.channels.cache.get(logChannelId);
 
             try {
-                // 1. Generar el transcript (Buffer para reutilizarlo)
+                // 1. Generar el transcript (Buffer para poder subirlo a Storage)
                 const attachment = await transcripts.createTranscript(channel, {
                     limit: -1,
                     fileName: `transcript-${channel.name}.html`,
                     saveImages: true,
                     poweredBy: false,
-                    hydrate: true
+                    hydrate: true,
+                    returnBuffer: true // Retornamos buffer para el upload
                 });
 
-                // 2. URL de tu Web
-                const webTranscriptURL = `https://tickets.andarp.com/${channel.name}`;
+                // 2. SUBIR A FIREBASE STORAGE
+                // Esto permite que tickets.html lea el archivo después
+                const { storage } = require('./firebase'); 
+                const bucket = storage.bucket();
+                const file = bucket.file(`transcripts/${channel.name}.html`);
+                
+                await file.save(attachment, {
+                    metadata: { contentType: 'text/html' }
+                });
 
-                // 3. Buscar al usuario dueño del ticket (el que no es Staff ni el Bot)
-                // Usamos el array staffHierarchy definido arriba en tu código
+                // 3. URL de tu Web con el parámetro de ID
+                const webTranscriptURL = `https://andarp.web.app/tickets.html?id=${channel.name}`;
+
+                // 4. Buscar al usuario dueño del ticket
                 const userPermission = channel.permissionOverwrites.cache.find(po => 
                     po.type === 1 && 
                     po.id !== guild.id && 
@@ -448,48 +458,52 @@ module.exports = {
                     !staffHierarchy.includes(po.id)
                 );
 
-                // 4. ENVÍO POR DM AL USUARIO
+                // 5. ENVÍO POR DM AL USUARIO
                 if (userPermission) {
                     try {
-                        const targetUser = await guild.members.fetch(userPermission.id);
+                        const targetUser = await guild.members.fetch(userPermission.id).catch(() => null);
                         if (targetUser) {
                             const dmEmbed = new EmbedBuilder()
                                 .setColor('#e1ff00')
                                 .setTitle('📂 Copia de tu Ticket - Anda RP')
-                                .setDescription(`Tu ticket **${channel.name}** ha sido cerrado.\n\n**Resolución:**\n\`\`\`${razon}\`\`\``)
-                                .addFields({ name: '🌐 Ver en línea:', value: `[Click aquí](${webTranscriptURL})` })
-                                .setFooter({ text: 'Anda RP - Soporte' });
+                                .setDescription(`Tu ticket **${channel.name}** ha sido cerrado exitosamente.\n\n**Resolución Final:**\n\`\`\`${razon}\`\`\``)
+                                .addFields({ name: '🌐 Ver en nuestra Web:', value: `[Click para ir a la Web](${webTranscriptURL})` })
+                                .setFooter({ text: 'Gracias por formar parte de Anda RP' })
+                                .setTimestamp();
 
                             await targetUser.send({ 
                                 embeds: [dmEmbed], 
-                                files: [attachment] 
+                                files: [new AttachmentBuilder(attachment, { name: `ticket-${channel.name}.html` })] 
                             });
                         }
                     } catch (dmErr) {
-                        console.log("⚠️ El usuario tiene los DM cerrados o no se pudo encontrar.");
+                        console.log("⚠️ No se pudo enviar el DM (posiblemente cerrados).");
                     }
                 }
 
-                // 5. ENVIAR LOG AL CANAL DE STAFF
+                // 6. ENVIAR LOG AL CANAL DE STAFF
                 if (logChan) {
                     const closeLog = new EmbedBuilder()
                         .setColor('#2b2d31')
-                        .setTitle('🔒 Ticket Cerrado')
+                        .setTitle('🔒 Ticket Cerrado e Indexado')
                         .addFields(
-                            { name: '📂 Ticket', value: `\`${channel.name}\``, inline: true },
-                            { name: '👤 Cerrado por', value: `<@${user.id}>`, inline: true },
+                            { name: '📂 ID Ticket', value: `\`${channel.name}\``, inline: true },
+                            { name: '👤 Staff a cargo', value: `<@${user.id}>`, inline: true },
                             { name: '📝 Resolución', value: `\`\`\`${razon}\`\`\`` },
-                            { name: '🌐 Enlace Web', value: `[Ver Transcript](${webTranscriptURL})` }
+                            { name: '🌐 Link Web', value: `[Abrir en andarp.web.app](${webTranscriptURL})` }
                         )
                         .setTimestamp();
                     
-                    await logChan.send({ embeds: [closeLog], files: [attachment] });
+                    await logChan.send({ 
+                        embeds: [closeLog], 
+                        files: [new AttachmentBuilder(attachment, { name: `transcript-${channel.name}.html` })] 
+                    });
                 }
 
-                // 6. Mensaje final y borrado
+                // 7. Mensaje final y borrado
                 const delEmbed = new EmbedBuilder()
                     .setColor('#ed4245')
-                    .setDescription('🔒 **Cerrado:** El ticket ha sido enviado al usuario y archivado. Borrando en **5 segundos**.');
+                    .setDescription('🔒 **Cerrado:** El archivo se subió a la web y se envió por DM. Borrando en **5 segundos**.');
 
                 await interaction.editReply({ embeds: [delEmbed] });
                 
@@ -499,11 +513,7 @@ module.exports = {
 
             } catch (err) { 
                 console.error("❌ Error en cierre:", err);
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({ content: "Error al cerrar el ticket.", ephemeral: true });
-                } else {
-                    await interaction.editReply("❌ Error crítico al archivar.");
-                }
+                await interaction.editReply("❌ Error crítico al archivar, pero el canal se borrará.");
                 setTimeout(() => channel.delete().catch(() => {}), 3000);
             }
         }
