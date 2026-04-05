@@ -1,8 +1,9 @@
 const { EmbedBuilder } = require('discord.js');
+const ms = require('ms'); // Importante: npm install ms
 
 module.exports = {
     name: 'despacho',
-    description: 'Asigna un rol de despacho por 1 hora.',
+    description: 'Asigna un rol de despacho por tiempo definido.',
     async execute(message, args) {
         // --- 1. CONFIGURACIÓN DE IDS ---
         const config = {
@@ -12,16 +13,23 @@ module.exports = {
 
         const ejecutorId = message.author.id;
         const targetMember = message.mentions.members.first();
-
+        
         // --- 2. VALIDACIONES ---
-        // Verificar si el que lo ejecuta tiene permiso
         if (!config[ejecutorId]) {
-            return message.reply('❌ No tienes permisos para usar este comando de despacho.');
+            return message.reply('❌ No tienes permisos para usar este comando.');
         }
 
-        // Verificar si mencionó a alguien
         if (!targetMember) {
-            return message.reply('⚠️ Debes mencionar a un usuario. Uso: `!despacho @usuario`');
+            return message.reply('⚠️ Uso: `!despacho @usuario [tiempo]`\nEjemplo: `!despacho @usuario 10m`');
+        }
+
+        // --- 3. LÓGICA DE TIEMPO ---
+        // Si no hay segundo argumento (args[1]), el tiempo por defecto es 1 hora
+        const tiempoRaw = args[1] || '1h'; 
+        const tiempoMs = ms(tiempoRaw); // Convierte "1h", "30m", "10s" a milisegundos
+
+        if (!tiempoMs) {
+            return message.reply('❌ Formato de tiempo inválido. Usa: `1h`, `30m`, `10s`, etc.');
         }
 
         const roleId = config[ejecutorId];
@@ -32,7 +40,7 @@ module.exports = {
         }
 
         try {
-            // --- 3. ASIGNACIÓN DEL ROL ---
+            // --- 4. ASIGNACIÓN DEL ROL ---
             await targetMember.roles.add(role);
 
             const embed = new EmbedBuilder()
@@ -41,26 +49,25 @@ module.exports = {
                 .setDescription(`El usuario ${targetMember} ha recibido el rol **${role.name}**.`)
                 .addFields(
                     { name: '👤 Autorizado por', value: `<@${ejecutorId}>`, inline: true },
-                    { name: '⏳ Duración', value: '1 Hora', inline: true }
+                    { name: '⏳ Duración', value: `\`${tiempoRaw}\``, inline: true }
                 )
                 .setFooter({ text: 'El rol se removerá automáticamente.' })
                 .setTimestamp();
 
             await message.channel.send({ embeds: [embed] });
 
-            // --- 4. TEMPORIZADOR (1 HORA = 3600000 ms) ---
+            // --- 5. TEMPORIZADOR DINÁMICO ---
             setTimeout(async () => {
                 try {
-                    // Refrescamos al miembro por si salió y entró del server
                     const memberCheck = await message.guild.members.fetch(targetMember.id).catch(() => null);
                     if (memberCheck && memberCheck.roles.cache.has(roleId)) {
                         await memberCheck.roles.remove(role);
-                        console.log(`✅ Rol ${role.name} removido de ${memberCheck.user.tag} tras 1 hora.`);
+                        console.log(`✅ Rol ${role.name} removido de ${memberCheck.user.tag} tras ${tiempoRaw}.`);
                     }
                 } catch (err) {
                     console.error('❌ Error al quitar el rol de despacho:', err);
                 }
-            }, 3600000);
+            }, tiempoMs);
 
         } catch (error) {
             console.error(error);
