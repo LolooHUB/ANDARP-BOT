@@ -7,7 +7,7 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.MessageContent, // <--- OBLIGATORIO PARA EL COMANDOS '!'
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessageReactions
     ]
@@ -15,7 +15,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// --- CARGA DE COMANDOS ---
+// --- 📂 CARGA DE COMANDOS ---
 const foldersPath = path.join(__dirname, 'Comandos');
 const commandFolders = fs.readdirSync(foldersPath);
 
@@ -31,9 +31,9 @@ for (const folder of commandFolders) {
     }
 }
 
-// --- EVENTO READY ---
+// --- 🚀 EVENTO READY ---
 client.once('ready', async (c) => {
-    console.log(`✅ Bot Online: ${c.user.tag}`);
+    console.log(`✅ Anda RP Online: ${c.user.tag}`);
 
     client.user.setPresence({
         activities: [{ name: 'Anda RP 🔥', type: ActivityType.Watching }],
@@ -50,15 +50,29 @@ client.once('ready', async (c) => {
                 await canalTickets.bulkDelete(mensajes, true);
             }
             await sendTicketPanel(canalTickets);
-            console.log("🎫 Canal de tickets limpiado y panel enviado.");
+            console.log("🎫 Canal de tickets actualizado y panel enviado.");
         } catch (error) {
             console.error("❌ Error en auto-panel:", error);
         }
     }
 });
 
-// --- MANEJO DE INTERACCIONES ---
+// --- 💬 MANEJO DE MENSAJES (COMANDO SECRETO !) ---
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+
+    // Detectar el comando secreto de administración
+    if (message.content.startsWith('!dinero-give')) {
+        const cmdBanco = client.commands.get('banco');
+        if (cmdBanco && cmdBanco.handleAdminGive) {
+            await cmdBanco.handleAdminGive(message);
+        }
+    }
+});
+
+// --- ⚡ MANEJO DE INTERACCIONES ---
 client.on('interactionCreate', async (interaction) => {
+    
     // 1️⃣ COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
@@ -68,10 +82,11 @@ client.on('interactionCreate', async (interaction) => {
             await command.execute(interaction);
         } catch (error) {
             console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
+            const msgError = { content: 'Hubo un error al ejecutar el comando.', ephemeral: true };
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: 'Hubo un error interno al ejecutar este comando.', ephemeral: true });
+                await interaction.followUp(msgError);
             } else {
-                await interaction.reply({ content: 'Hubo un error al ejecutar el comando.', ephemeral: true });
+                await interaction.reply(msgError);
             }
         }
         return;
@@ -81,42 +96,51 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // --- SISTEMA DE APERTURA ---
+        // SISTEMA DE APERTURA
         if (customId.includes('modal_setup') || customId.includes('confirm_') || customId.includes('abort_') || customId.includes('modal_resumen')) {
-            const cmdApertura = client.commands.get('apertura');
-            if (cmdApertura) return await cmdApertura.handleAperturaInteractions(interaction);
+            const cmd = client.commands.get('apertura');
+            if (cmd) return await cmd.handleAperturaInteractions(interaction);
         }
 
-        // --- SISTEMA DE DNI ---
+        // SISTEMA DE DNI
         if (customId === 'modal_crear_dni') {
-            const cmdDni = client.commands.get('dni');
-            if (cmdDni) return await cmdDni.handleDNIInteractions(interaction);
+            const cmd = client.commands.get('dni');
+            if (cmd) return await cmd.handleDNIInteractions(interaction);
         }
 
-        // --- SISTEMA DE LICENCIAS ---
+        // SISTEMA DE LICENCIAS
         if (customId === 'modal_solicitar_licencia') {
-            const cmdLic = client.commands.get('licencia');
-            if (cmdLic) return await cmdLic.handleLicenciaInteractions(interaction);
+            const cmd = client.commands.get('licencia');
+            if (cmd) return await cmd.handleLicenciaInteractions(interaction);
         }
-
         if (customId.includes('_lic_')) {
-            const cmdLic = client.commands.get('licencia');
-            if (cmdLic) return await cmdLic.handleButtons(interaction);
+            const cmd = client.commands.get('licencia');
+            if (cmd) return await cmd.handleButtons(interaction);
         }
 
-        // --- SISTEMA DE MULTAS ---
+        // SISTEMA DE MULTAS
         if (customId.startsWith('modal_multa_')) {
-            const cmdMultar = client.commands.get('multar');
-            if (cmdMultar) return await cmdMultar.handleMultaInteractions(interaction);
+            const cmd = client.commands.get('multar');
+            if (cmd) return await cmd.handleMultaInteractions(interaction);
         }
 
-        // --- SISTEMA DE DETENCIONES ---
+        // SISTEMA DE DETENCIONES
         if (customId.startsWith('modal_detencion_')) {
-            const cmdDetencion = client.commands.get('detencion');
-            if (cmdDetencion) return await cmdDetencion.handleDetencionInteractions(interaction);
+            const cmd = client.commands.get('detencion');
+            if (cmd) return await cmd.handleDetencionInteractions(interaction);
         }
 
-        // --- SISTEMA DE TICKETS ---
+        // SISTEMA DE VEHÍCULOS
+        if (customId === 'modal_registro_vehiculo') {
+            const cmd = client.commands.get('vehiculo');
+            if (cmd) return await cmd.handleVehiculoInteractions(interaction);
+        }
+        if (customId.includes('_veh_')) {
+            const cmd = client.commands.get('vehiculo');
+            if (cmd) return await cmd.handleButtons(interaction);
+        }
+
+        // SISTEMA DE TICKETS
         try {
             await handleTicketInteractions(interaction);
         } catch (error) {
@@ -125,7 +149,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// --- MANEJO DE REACCIONES ---
+// --- ⭐ MANEJO DE REACCIONES ---
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) {
