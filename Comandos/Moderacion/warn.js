@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
-const { db } = require('../../Automatizaciones/firebase');
+const { db } = require('../Automatizaciones/firebase');
 const axios = require('axios');
 const FormData = require('form-data');
 
