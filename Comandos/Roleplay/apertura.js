@@ -9,7 +9,7 @@ const {
     TextInputStyle,
     PermissionFlagsBits 
 } = require('discord.js');
-const { db } = require('../../Automatizaciones/firebase');
+const { db } = require('../Automatizaciones/firebase');
 const fs = require('fs');
 
 module.exports = {

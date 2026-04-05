@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { db } = require('../../Automatizaciones/firebase');
+const { db } = require('../Automatizaciones/firebase');
 
 module.exports = {
     data: new SlashCommandBuilder()
