@@ -3,22 +3,24 @@ const { db } = require('../../Automatizaciones/firebase');
 const axios = require('axios');
 const FormData = require('form-data');
 
-// Función para subir a Imgur mediante API
-async function uploadToImgur(attachment) {
+// Función para subir a ImgBB mediante API
+async function uploadToImgBB(attachment) {
     try {
         const formData = new FormData();
         formData.append('image', attachment.url);
         
-        const response = await axios.post('https://api.imgur.com/3/image', formData, {
+        // Usamos el secret APIKEY_IMGBB
+        const apiKey = process.env.APIKEY_IMGBB; 
+        
+        const response = await axios.post(`https://api.imgbb.com/1/upload?key=${apiKey}`, formData, {
             headers: {
-                Authorization: `Client-ID ${process.env.IMGUR_CLIENT_ID}`,
                 ...formData.getHeaders()
             }
         });
-        return response.data.data.link;
+        return response.data.data.url; // Retorna el link directo de la imagen
     } catch (error) {
-        console.error('Error al subir a Imgur:', error);
-        return attachment.url; // Fallback al link de Discord si falla Imgur
+        console.error('Error al subir a ImgBB:', error.response ? error.response.data : error.message);
+        return attachment.url; // Fallback al link de Discord si falla ImgBB
     }
 }
 
@@ -46,11 +48,11 @@ module.exports = {
         const canalSancionesId = '1477387624288354324';
         const logBotId = '1482565635715109015';
 
-        // Pensando... (Defer para evitar timeout por la subida a Imgur)
+        // Pensando... (Defer para evitar timeout por la subida a ImgBB)
         await interaction.deferReply({ ephemeral: true });
 
-        // 1. Subir evidencia a Imgur
-        const imgurLink = await uploadToImgur(evidencia);
+        // 1. Subir evidencia a ImgBB
+        const imgbbLink = await uploadToImgBB(evidencia);
 
         // 2. Registro en Firebase (Colección específica)
         const warnData = {
@@ -59,7 +61,7 @@ module.exports = {
             moderadorId: interaction.user.id,
             moderadorTag: interaction.user.tag,
             motivo: motivo,
-            evidencia: imgurLink,
+            evidencia: imgbbLink,
             fecha: new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })
         };
 
@@ -67,7 +69,7 @@ module.exports = {
 
         // 3. Crear Embed para el Canal de Sanciones
         const embedPub = new EmbedBuilder()
-            .setColor('#ff8c00') // Naranja fuerte (equivalente a ff8c00d5)
+            .setColor('#ff8c00') // Naranja fuerte
             .setTitle(`⚠️ Usuario Warneado - ${user.username}`)
             .addFields(
                 { name: '👤 **USUARIO SANCIONADO**', value: `<@${user.id}> (${user.id})`, inline: false },
@@ -85,7 +87,7 @@ module.exports = {
         if (canalSanciones) {
             await canalSanciones.send({ 
                 embeds: [embedPub], 
-                content: `🖼️ **Evidencia:** ${imgurLink}`,
+                content: `🖼️ **Evidencia:** ${imgbbLink}`,
                 files: ['./attachment/LogoPFP.png'] 
             });
         }
@@ -97,7 +99,7 @@ module.exports = {
         // 5. Notificar al usuario por MD
         try {
             await user.send({
-                content: `⚠️ **Has recibido un aviso en Anda RP**\n\n**Motivo:** ${motivo}\n**Evidencia:** ${imgurLink}\n\n*Si crees que esto es un error, contacta con un superior.*`
+                content: `⚠️ **Has recibido un aviso en Anda RP**\n\n**Motivo:** ${motivo}\n**Evidencia:** ${imgbbLink}\n\n*Si crees que esto es un error, contacta con un superior.*`
             });
         } catch (error) {
             console.log(`No se pudo enviar MD a ${user.tag}`);

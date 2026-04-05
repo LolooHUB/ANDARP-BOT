@@ -28,7 +28,7 @@ module.exports = {
                 .setFooter({ text: 'Banc de Catalunya' })
                 .setTimestamp();
 
-            return interaction.reply({ embeds: [embed], ephemeral: true });
+            return interaction.reply({ embeds: [embed], ephemeral: false });
 
         } catch (error) {
             return interaction.reply({ content: "❌ Error al conectar con el banco.", ephemeral: true });

@@ -3,21 +3,24 @@ const { db } = require('../../Automatizaciones/firebase');
 const axios = require('axios');
 const FormData = require('form-data');
 
-// Función para subir a Imgur (Mechanical Necessity para la evidencia)
-async function uploadToImgur(attachment) {
+// Función para subir a ImgBB mediante API (Reemplazando Imgur)
+async function uploadToImgBB(attachment) {
     try {
         const formData = new FormData();
         formData.append('image', attachment.url);
-        const response = await axios.post('https://api.imgur.com/3/image', formData, {
+        
+        // Usamos el secret APIKEY_IMGBB
+        const apiKey = process.env.APIKEY_IMGBB; 
+        
+        const response = await axios.post(`https://api.imgbb.com/1/upload?key=${apiKey}`, formData, {
             headers: {
-                Authorization: `Client-ID ${process.env.IMGUR_CLIENT_ID}`,
                 ...formData.getHeaders()
             }
         });
-        return response.data.data.link;
+        return response.data.data.url; 
     } catch (error) {
-        console.error('Error al subir a Imgur:', error);
-        return attachment.url;
+        console.error('Error al subir a ImgBB:', error.response ? error.response.data : error.message);
+        return attachment.url; // Fallback al link de Discord si falla
     }
 }
 
@@ -28,7 +31,7 @@ module.exports = {
         .addUserOption(opt => opt.setName('usuario').setDescription('Usuario a expulsar').setRequired(true))
         .addStringOption(opt => opt.setName('motivo').setDescription('Motivo de la expulsión').setRequired(true))
         .addAttachmentOption(opt => opt.setName('evidencia').setDescription('Prueba visual del kick').setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers), // Acceso para Mods y Admins con este permiso
+        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers), 
 
     async execute(interaction) {
         const user = interaction.options.getUser('usuario');
@@ -44,8 +47,8 @@ module.exports = {
 
         await interaction.deferReply({ ephemeral: true });
 
-        // 1. Subir a Imgur
-        const imgurLink = await uploadToImgur(evidencia);
+        // 1. Subir a ImgBB
+        const imgbbLink = await uploadToImgBB(evidencia);
         const fechaKick = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
 
         // 2. Registro en Firebase (Persistencia)
@@ -54,15 +57,15 @@ module.exports = {
             usuarioTag: user.tag,
             moderadorId: interaction.user.id,
             motivo: motivo,
-            evidencia: imgurLink,
+            evidencia: imgbbLink,
             fecha: fechaKick,
             tipo: 'KICK'
         };
         await db.collection('sanciones_kicks').add(kickData);
 
-        // 3. Embed del Canal de Sanciones (TAL CUAL EL PROMPT)
+        // 3. Embed del Canal de Sanciones
         const embedKick = new EmbedBuilder()
-            .setColor('#ff8c00') // Naranja Sanción
+            .setColor('#ff8c00') 
             .setTitle(`🚨 Usuario Kickeado - ${user.username}`)
             .setDescription(`**MODERADOR :** <@${interaction.user.id}>\n\n**MOTIVO :** ${motivo}`)
             .setAuthor({ name: 'Sistema de Sanciones', iconURL: 'attachment://LogoPFP.png' })
@@ -71,7 +74,7 @@ module.exports = {
 
         // 4. Notificación al usuario por MD (Antes del kick)
         try {
-            await user.send(`🚨 **Has sido expulsado de Anda RP**\n\n**Motivo:** ${motivo}\n**Evidencia:** ${imgurLink}`);
+            await user.send(`🚨 **Has sido expulsado de Anda RP**\n\n**Motivo:** ${motivo}\n**Evidencia:** ${imgbbLink}`);
         } catch (e) {
             console.log("No se pudo enviar MD al usuario.");
         }
@@ -85,7 +88,7 @@ module.exports = {
         if (canalSanciones) {
             await canalSanciones.send({ 
                 embeds: [embedKick], 
-                content: `🔗 **Evidencia:** ${imgurLink}`, 
+                content: `🔗 **Evidencia:** ${imgbbLink}`, 
                 files: ['./attachment/LogoPFP.png'] 
             });
         }
