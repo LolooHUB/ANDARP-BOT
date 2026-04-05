@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // --- 🎫 IMPORTACIÓN DE TICKETS ---
-const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Tickets/sistema_tickets');
+const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Automatizaciones/tickets');
 
 const client = new Client({
     intents: [
