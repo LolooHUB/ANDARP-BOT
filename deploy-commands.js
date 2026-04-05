@@ -28,12 +28,10 @@ for (const folder of commandFolders) {
     }
 }
 
-// CONFIGURACIÓN DE CONEXIÓN
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
     try {
-        const guildId = '1482587270790906008'; // 👈 TU NUEVO ID APLICADO
         const clientId = process.env.CLIENT_ID;
 
         if (!clientId) {
@@ -41,24 +39,31 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
             process.exit(1);
         }
 
-        console.log(`\n📡 [2/3] Enviando petición a Discord...`);
-        console.log(`   > Bot: ${clientId}`);
-        console.log(`   > Server: ${guildId}`);
+        console.log(`\n📡 [2/3] Intentando Registro GLOBAL (Saltando restricciones de servidor)...`);
+        console.log(`   > Bot ID: ${clientId}`);
 
-        // Forzamos la sobrescritura directa
+        // Usamos la ruta GLOBAL para evitar el error de "Missing Access" del servidor
         const data = await rest.put(
-            Routes.applicationGuildCommands(clientId, guildId),
+            Routes.applicationCommands(clientId),
             { body: commands },
         );
 
-        console.log(`\n✨ [3/3] ¡ÉXITO! Se registraron ${data.length} comandos.`);
-        process.exit(0); 
+        console.log(`\n✨ [3/3] ¡ÉXITO TOTAL! Se registraron ${data.length} comandos de forma global.`);
+        console.log(`💡 Nota: Los comandos globales pueden tardar hasta 10 minutos en aparecer en Discord.`);
+        
+        // Pequeño delay para asegurar que la conexión se cierre bien
+        setTimeout(() => process.exit(0), 1000); 
 
     } catch (error) {
-        console.error('\n❌ ERROR DE CONEXIÓN:');
-        if (error.status === 401) console.error('   > El TOKEN es inválido o expiró.');
-        if (error.status === 404) console.error('   > El CLIENT_ID o el GUILD_ID no existen.');
-        console.error(error);
+        console.error('\n❌ ERROR CRÍTICO AL REGISTRAR:');
+        
+        if (error.status === 401) {
+            console.error('   > El TOKEN en el .env es incorrecto.');
+        } else if (error.status === 403) {
+            console.error('   > El CLIENT_ID no pertenece a este TOKEN o falta el scope "applications.commands".');
+        } else {
+            console.error(error);
+        }
         process.exit(1);
     }
 })();
