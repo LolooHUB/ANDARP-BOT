@@ -6,11 +6,7 @@ require('dotenv').config();
 const commands = [];
 const foldersPath = path.join(__dirname, 'Comandos');
 
-// Verificamos que la carpeta Comandos exista
-if (!fs.existsSync(foldersPath)) {
-    console.error('❌ Error: La carpeta "Comandos" no existe.');
-    process.exit(1);
-}
+console.log('🔍 Iniciando lectura de carpetas...');
 
 const commandFolders = fs.readdirSync(foldersPath);
 
@@ -20,53 +16,61 @@ for (const folder of commandFolders) {
     if (fs.lstatSync(commandsPath).isDirectory()) {
         const commandFiles = fs.readdirSync(commandsPath).filter(file => 
             file.endsWith('.js') && 
-            file !== 'firebase.js' && 
-            file !== 'tickets.js' // 👈 Ignoramos tickets.js para limpiar el log
+            !['firebase.js', 'tickets.js'].includes(file)
         );
         
         for (const file of commandFiles) {
             const filePath = path.join(commandsPath, file);
             try {
+                // Forzamos la limpieza de caché para evitar conflictos
+                delete require.cache[require.resolve(filePath)];
                 const command = require(filePath);
-                if ('data' in command && 'execute' in command) {
+                
+                if (command.data && command.execute) {
                     commands.push(command.data.toJSON());
-                    console.log(`✅ Comando cargado: ${file}`);
+                    console.log(`✅ [CARGADO] ${file}`);
                 }
             } catch (err) {
-                console.error(`❌ Error al cargar ${file}: ${err.message}`);
+                console.error(`❌ [ERROR] Fallo al leer ${file}: ${err.message}`);
             }
         }
     }
 }
 
-// Validación de variables de entorno
-const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.CLIENT_ID;
-const guildId = '1475568777360969932';
-
-if (!token || !clientId) {
-    console.error('❌ Error: Falta DISCORD_TOKEN o CLIENT_ID en el .env');
-    process.exit(1);
-}
-
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
     try {
-        console.log(`🚀 Intentando registrar ${commands.length} comandos Slash...`);
+        const guildId = '1475568777360969932';
+        const clientId = process.env.CLIENT_ID;
 
-        // Una sola petición PUT sobrescribe la lista anterior.
-        // Esto es mucho más rápido y evita que el proceso se tilde.
+        if (!clientId) throw new Error("Falta CLIENT_ID en el .env");
+
+        console.log(`\n📡 Conectando con la API de Discord para registrar ${commands.length} comandos...`);
+
+        // timeout para no quedarse esperando eternamente
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000); // 15 segundos máximo
+
         const data = await rest.put(
             Routes.applicationGuildCommands(clientId, guildId),
             { body: commands },
         );
 
-        console.log(`\n✨ Éxito: Se registraron ${data.length} comandos correctamente.`);
-        process.exit(0); // Forzamos la salida exitosa
+        clearTimeout(timeout);
+        console.log(`\n✨ ÉXITO: Se registraron ${data.length} comandos.`);
+        
+        // FORZAMOS EL CIERRE DEL PROCESO
+        console.log('🏁 Finalizando proceso...');
+        process.exit(0); 
+
     } catch (error) {
-        console.error('\n❌ Error en el registro de la API de Discord:');
-        console.error(error);
+        if (error.name === 'AbortError') {
+            console.error('\n❌ ERROR: La conexión con Discord tardó demasiado (Timeout).');
+        } else {
+            console.error('\n❌ ERROR API DISCORD:');
+            console.error(error);
+        }
         process.exit(1);
     }
 })();
