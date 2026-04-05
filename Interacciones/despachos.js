@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const ms = require('ms');
-const { db } = require('../Automatizaciones/firebase');
+const { db } = require('../Comandos/Automatizaciones/firebase');
 
 /**
  * SISTEMA DE DESPACHOS PROFESIONAL
