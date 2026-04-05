@@ -351,3 +351,137 @@ module.exports = {
 
                 if (nextRankIndex >= staffHierarchy.length) {
                     return interaction.reply({ content: '⚠️ Este ticket ya se encuentra en el nivel máximo de supervisión.', ephemeral: true });
+                }
+
+                const nextRoleId = staffHierarchy[nextRankIndex];
+                const prevRoleId = currentRankIndex !== -1 ? staffHierarchy[currentRankIndex] : null;
+
+                // Bloquear escritura a rangos anteriores y al staff que asciende si no es el nuevo rango
+                await channel.permissionOverwrites.edit(user.id, { SendMessages: false });
+                if (prevRoleId) await channel.permissionOverwrites.edit(prevRoleId, { SendMessages: false });
+                
+                // Abrir paso al nuevo rango
+                await channel.permissionOverwrites.edit(nextRoleId, { 
+                    ViewChannel: true, 
+                    SendMessages: true, 
+                    AttachFiles: true, 
+                    ReadMessageHistory: true 
+                });
+
+                const ascEmbed = new EmbedBuilder()
+                    .setColor('#ff9900')
+                    .setTitle('🚀 TICKET ESCALADO')
+                    .setDescription(`Este caso requiere una revisión de nivel superior. Se ha notificado a los responsables.`)
+                    .addFields(
+                        { name: '⏫ Rango Asignado:', value: `<@&${nextRoleId}>`, inline: true },
+                        { name: '👤 Solicitante:', value: `<@${user.id}>`, inline: true },
+                    )
+                    .setTimestamp();
+
+                const ascRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('ticket_reclamar_asc').setLabel('Reclamar Ascenso').setEmoji('📌').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('ticket_ascender').setLabel('Ascender de Nuevo').setEmoji('🚀').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger)
+                );
+
+                await interaction.reply({ 
+                    content: `⚠️ **Notificación de Escalamiento:** <@&${nextRoleId}>`, 
+                    embeds: [ascEmbed], 
+                    components: [ascRow] 
+                });
+
+                const logChan = guild.channels.cache.get(logChannelId);
+                if (logChan) {
+                    logChan.send({ 
+                        embeds: [new EmbedBuilder().setColor('#ff9900').setDescription(`🚀 **Ascenso:** El ticket <#${channel.id}> subió a <@&${nextRoleId}> por orden de <@${user.id}>`)] 
+                    });
+                }
+            } catch (err) { 
+                console.error("Error en ascenso:", err); 
+            }
+        }
+
+        // --- F. BOTÓN: CERRAR (SOLICITUD DE MOTIVO) ---
+        if (customId === 'ticket_cerrar') {
+            const modal = new ModalBuilder()
+                .setCustomId('modal_final_close')
+                .setTitle('🔒 Cierre Definitivo de Ticket');
+
+            const input = new TextInputBuilder()
+                .setCustomId('razon_txt')
+                .setLabel("Razón del cierre / Resolución")
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Explica brevemente qué se hizo o por qué se cierra el ticket...')
+                .setMaxLength(500)
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+            return await interaction.showModal(modal);
+        }
+
+        // --- G. CIERRE DEFINITIVO + GENERACIÓN DE LOGS Y TRANSCRIPT ---
+        if (interaction.isModalSubmit() && customId === 'modal_final_close') {
+            await interaction.deferReply();
+            
+            const razon = interaction.fields.getTextInputValue('razon_txt');
+            const logChan = guild.channels.cache.get(logChannelId);
+
+            try {
+                // Generar el archivo HTML de la conversación
+                const attachment = await transcripts.createTranscript(channel, {
+                    limit: -1,
+                    fileName: `transcript-${channel.name}.html`,
+                    saveImages: true,
+                    poweredBy: false,
+                    hydrate: true
+                });
+
+                // Obtener estadísticas de mensajes del staff
+                const messages = await channel.messages.fetch({ limit: 100 });
+                const staffMsgs = messages.filter(m => !m.author.bot && staffHierarchy.some(r => guild.members.cache.get(m.author.id)?.roles.cache.has(r)));
+                
+                const msgCounts = {};
+                staffMsgs.forEach(m => { msgCounts[m.author.id] = (msgCounts[m.author.id] || 0) + 1; });
+
+                const statsFormatted = Object.entries(msgCounts)
+                    .map(([id, count]) => `> \`[${count}]\` mensajes - <@${id}>`)
+                    .join('\n') || "> No hubo participación del Staff registrada.";
+
+                if (logChan) {
+                    const closeLog = new EmbedBuilder()
+                        .setColor('#2b2d31')
+                        .setTitle('🔒 Ticket Cerrado y Archivado')
+                        .setThumbnail(guild.iconURL())
+                        .addFields(
+                            { name: '📂 Identificación', value: `\`${channel.name}\``, inline: true },
+                            { name: '👤 Responsable del Cierre', value: `<@${user.id}>`, inline: true },
+                            { name: '📅 Tiempos', value: `Abierto: \`${channel.createdAt.toLocaleDateString()}\`\nCerrado: <t:${Math.floor(Date.now() / 1000)}:f>`, inline: false },
+                            { name: '📝 Resolución Final', value: `\`\`\`${razon}\`\`\`` },
+                            { name: '📊 Actividad del Equipo', value: statsFormatted }
+                        )
+                        .setFooter({ text: 'Sistema de Soporte Finalizado • Anda RP' })
+                        .setTimestamp();
+                    
+                    await logChan.send({ embeds: [closeLog], files: [attachment] });
+                }
+
+                // Informar al canal antes del borrado
+                const delEmbed = new EmbedBuilder()
+                    .setColor('#ed4245')
+                    .setDescription('🔒 **Protocolo de Cierre:** El ticket ha sido archivado. Este canal se autodestruirá en **5 segundos**.');
+
+                await interaction.editReply({ embeds: [delEmbed] });
+                
+                // Borrado definitivo del canal
+                setTimeout(() => {
+                    channel.delete().catch(err => console.log("Error borrando canal tras cierre: ", err));
+                }, 5000);
+
+            } catch (err) { 
+                console.error("Error en proceso de cierre:", err);
+                await interaction.editReply("❌ Ocurrió un error al generar el transcript, el canal se cerrará de igual forma.");
+                setTimeout(() => channel.delete().catch(() => {}), 3000);
+            }
+        }
+    }
+};
