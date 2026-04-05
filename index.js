@@ -48,8 +48,8 @@ if (fs.existsSync(interaccionesPath)) {
     }
 }
 
-// --- 🚀 EVENTO READY ---
-client.once('ready', async (c) => {
+// --- 🚀 EVENTO READY (ACTUALIZADO A clientReady) ---
+client.once('clientReady', async (c) => {
     console.log(`✅ Anda RP Online: ${c.user.tag}`);
 
     client.user.setPresence({
@@ -81,7 +81,6 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    // 1. Caso específico: dinero-give
     if (commandName === 'dinero-give') {
         const cmdBanco = client.commands.get('banco');
         if (cmdBanco && cmdBanco.handleAdminGive) {
@@ -89,7 +88,6 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // 2. Ejecución dinámica de la carpeta ./Interacciones (Aca entra despacho)
     const interaccion = client.prefixInteractions.get(commandName) || client.prefixInteractions.get('despachos');
     if (interaccion && typeof interaccion.execute === 'function') {
         try {
@@ -103,6 +101,7 @@ client.on('messageCreate', async (message) => {
 // --- ⚡ MANEJO DE INTERACCIONES (SLASH, BOTONES, MODALES) ---
 client.on('interactionCreate', async (interaction) => {
     
+    // 1. COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -110,51 +109,65 @@ client.on('interactionCreate', async (interaction) => {
             await command.execute(interaction);
         } catch (error) {
             console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
-            const msgError = { content: 'Hubo un error al ejecutar el comando.', ephemeral: true };
-            interaction.replied || interaction.deferred ? await interaction.followUp(msgError) : await interaction.reply(msgError);
+            const msgError = { content: 'Hubo un error al ejecutar el comando.', flags: [64] };
+            // Verificación para evitar crash si ya se respondió
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(msgError).catch(() => {});
+            } else {
+                await interaction.reply(msgError).catch(() => {});
+            }
         }
         return;
     }
 
-    if (interaction.isButton() || interaction.isModalSubmit()) {
+    // 2. BOTONES, MODALES Y MENÚS
+    if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) {
         const { customId } = interaction;
 
-        // SISTEMA DE TICKETS
         try {
-            await handleTicketInteractions(interaction);
-        } catch (error) {
-            console.error("❌ Error en interacción de ticket:", error);
-        }
-
-        // REDIRECCIÓN DINÁMICA DE SISTEMAS
-        if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
-            const cmd = client.commands.get('apertura');
-            if (cmd) return await cmd.handleAperturaInteractions(interaction);
-        }
-        if (customId.includes('dni')) {
-            const cmd = client.commands.get('dni');
-            if (cmd) return await cmd.handleDNIInteractions(interaction);
-        }
-        if (customId.includes('licencia') || customId.includes('_lic_')) {
-            const cmd = client.commands.get('licencia');
-            if (cmd) {
-                if (customId.includes('_lic_')) return await cmd.handleButtons(interaction);
-                return await cmd.handleLicenciaInteractions(interaction);
+            // SISTEMA DE TICKETS (Prioritario)
+            // Agregamos una verificación para ver si es de tickets antes de ejecutar
+            if (customId.includes('ticket') || customId.includes('modal_t_') || customId.includes('modal_final_close') || customId.includes('t_')) {
+                await handleTicketInteractions(interaction);
+                return;
             }
-        }
-        if (customId.startsWith('modal_multa_')) {
-            const cmd = client.commands.get('multar');
-            if (cmd) return await cmd.handleMultaInteractions(interaction);
-        }
-        if (customId.startsWith('modal_detencion_')) {
-            const cmd = client.commands.get('detencion');
-            if (cmd) return await cmd.handleDetencionInteractions(interaction);
-        }
-        if (customId.includes('vehiculo') || customId.includes('_veh_')) {
-            const cmd = client.commands.get('vehiculo');
-            if (cmd) {
-                if (customId.includes('_veh_')) return await cmd.handleButtons(interaction);
-                return await cmd.handleVehiculoInteractions(interaction);
+
+            // REDIRECCIÓN DINÁMICA DE OTROS SISTEMAS
+            if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
+                const cmd = client.commands.get('apertura');
+                if (cmd) return await cmd.handleAperturaInteractions(interaction);
+            }
+            if (customId.includes('dni')) {
+                const cmd = client.commands.get('dni');
+                if (cmd) return await cmd.handleDNIInteractions(interaction);
+            }
+            if (customId.includes('licencia') || customId.includes('_lic_')) {
+                const cmd = client.commands.get('licencia');
+                if (cmd) {
+                    if (customId.includes('_lic_')) return await cmd.handleButtons(interaction);
+                    return await cmd.handleLicenciaInteractions(interaction);
+                }
+            }
+            if (customId.startsWith('modal_multa_')) {
+                const cmd = client.commands.get('multar');
+                if (cmd) return await cmd.handleMultaInteractions(interaction);
+            }
+            if (customId.startsWith('modal_detencion_')) {
+                const cmd = client.commands.get('detencion');
+                if (cmd) return await cmd.handleDetencionInteractions(interaction);
+            }
+            // VEHÍCULOS (Actualizado para manejar Menús de Selección)
+            if (customId.includes('vehiculo') || customId.includes('_veh_') || customId === 'select_tramite_vehiculo') {
+                const cmd = client.commands.get('vehiculo');
+                if (cmd) {
+                    if (customId.includes('_veh_')) return await cmd.handleButtons(interaction);
+                    return await cmd.handleVehiculoInteractions(interaction);
+                }
+            }
+        } catch (error) {
+            console.error("❌ Error en interacción:", error);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: 'Error al procesar la interacción.', flags: [64] }).catch(() => {});
             }
         }
     }
