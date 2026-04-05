@@ -1,21 +1,24 @@
 const { Client, GatewayIntentBits, ActivityType, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const { handleTicketInteractions, sendTicketPanel } = require('./Automatizaciones/tickets');
+
+// --- 🎫 IMPORTACIÓN DE TICKETS ---
+const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Tickets/sistema_tickets');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // <--- OBLIGATORIO PARA EL COMANDOS '!'
+        GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessageReactions
     ]
 });
 
 client.commands = new Collection();
+client.prefixInteractions = new Collection(); // Colección para comandos con '!'
 
-// --- 📂 CARGA DE COMANDOS ---
+// --- 📂 1. CARGA DE COMANDOS SLASH (/) ---
 const foldersPath = path.join(__dirname, 'Comandos');
 const commandFolders = fs.readdirSync(foldersPath);
 
@@ -28,6 +31,20 @@ for (const folder of commandFolders) {
         if ('data' in command && 'execute' in command) {
             client.commands.set(command.data.name, command);
         }
+    }
+}
+
+// --- 📂 2. CARGA DE INTERACCIONES DE PREFIJO (!) ---
+// Carga archivos de la carpeta ./Interacciones en la raíz
+const interaccionesPath = path.join(__dirname, 'Interacciones');
+if (fs.existsSync(interaccionesPath)) {
+    const interaccionFiles = fs.readdirSync(interaccionesPath).filter(file => file.endsWith('.js'));
+    for (const file of interaccionFiles) {
+        const filePath = path.join(interaccionesPath, file);
+        const interaccion = require(filePath);
+        // Guardamos por nombre de archivo o propiedad específica si la tiene
+        const name = file.split('.')[0]; 
+        client.prefixInteractions.set(name, interaccion);
     }
 }
 
@@ -47,7 +64,7 @@ client.once('ready', async (c) => {
         try {
             const mensajes = await canalTickets.messages.fetch({ limit: 50 });
             if (mensajes.size > 0) {
-                await canalTickets.bulkDelete(mensajes, true);
+                await canalTickets.bulkDelete(mensajes, true).catch(() => {});
             }
             await sendTicketPanel(canalTickets);
             console.log("🎫 Canal de tickets actualizado y panel enviado.");
@@ -57,94 +74,86 @@ client.once('ready', async (c) => {
     }
 });
 
-// --- 💬 MANEJO DE MENSAJES (COMANDO SECRETO !) ---
+// --- 💬 MANEJO DE MENSAJES (COMANDOS CON PREFIX !) ---
 client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
+    if (message.author.bot || !message.content.startsWith('!')) return;
 
-    // Detectar el comando secreto de administración
-    if (message.content.startsWith('!dinero-give')) {
+    const args = message.content.slice(1).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    // 1. Caso específico: dinero-give (Buscando en la colección de comandos slash)
+    if (commandName === 'dinero-give') {
         const cmdBanco = client.commands.get('banco');
         if (cmdBanco && cmdBanco.handleAdminGive) {
-            await cmdBanco.handleAdminGive(message);
+            return await cmdBanco.handleAdminGive(message);
+        }
+    }
+
+    // 2. Ejecución dinámica de la carpeta ./Interacciones
+    // Si tienes un archivo llamado "ayuda.js" en ./Interacciones, se ejecutará con "!ayuda"
+    const interaccion = client.prefixInteractions.get(commandName);
+    if (interaccion && typeof interaccion.execute === 'function') {
+        try {
+            await interaccion.execute(message, args, client);
+        } catch (error) {
+            console.error(`❌ Error en interaccion !${commandName}:`, error);
         }
     }
 });
 
-// --- ⚡ MANEJO DE INTERACCIONES ---
+// --- ⚡ MANEJO DE INTERACCIONES (SLASH, BOTONES, MODALES) ---
 client.on('interactionCreate', async (interaction) => {
     
-    // 1️⃣ COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
-
         try {
             await command.execute(interaction);
         } catch (error) {
             console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
             const msgError = { content: 'Hubo un error al ejecutar el comando.', ephemeral: true };
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp(msgError);
-            } else {
-                await interaction.reply(msgError);
-            }
+            interaction.replied || interaction.deferred ? await interaction.followUp(msgError) : await interaction.reply(msgError);
         }
         return;
     }
 
-    // 2️⃣ BOTONES Y MODALES
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const { customId } = interaction;
 
-        // SISTEMA DE APERTURA
-        if (customId.includes('modal_setup') || customId.includes('confirm_') || customId.includes('abort_') || customId.includes('modal_resumen')) {
+        // SISTEMA DE TICKETS (Centralizado)
+        try {
+            await handleTicketInteractions(interaction);
+        } catch (error) {
+            console.error("❌ Error en interacción de ticket:", error);
+        }
+
+        // --- SISTEMAS ADICIONALES (Carga por colección) ---
+        const systems = ['apertura', 'dni', 'licencia', 'multar', 'detencion', 'vehiculo'];
+        
+        // Mapeo de prefijos de customId a nombres de comandos
+        if (customId.includes('modal_setup') || customId.includes('confirm_') || customId.includes('abort_')) {
             const cmd = client.commands.get('apertura');
             if (cmd) return await cmd.handleAperturaInteractions(interaction);
         }
-
-        // SISTEMA DE DNI
         if (customId === 'modal_crear_dni') {
             const cmd = client.commands.get('dni');
             if (cmd) return await cmd.handleDNIInteractions(interaction);
         }
-
-        // SISTEMA DE LICENCIAS
-        if (customId === 'modal_solicitar_licencia') {
+        if (customId.includes('licencia') || customId.includes('_lic_')) {
             const cmd = client.commands.get('licencia');
-            if (cmd) return await cmd.handleLicenciaInteractions(interaction);
+            if (cmd) return customId.includes('_lic_') ? await cmd.handleButtons(interaction) : await cmd.handleLicenciaInteractions(interaction);
         }
-        if (customId.includes('_lic_')) {
-            const cmd = client.commands.get('licencia');
-            if (cmd) return await cmd.handleButtons(interaction);
-        }
-
-        // SISTEMA DE MULTAS
         if (customId.startsWith('modal_multa_')) {
             const cmd = client.commands.get('multar');
             if (cmd) return await cmd.handleMultaInteractions(interaction);
         }
-
-        // SISTEMA DE DETENCIONES
         if (customId.startsWith('modal_detencion_')) {
             const cmd = client.commands.get('detencion');
             if (cmd) return await cmd.handleDetencionInteractions(interaction);
         }
-
-        // SISTEMA DE VEHÍCULOS
-        if (customId === 'modal_registro_vehiculo') {
+        if (customId.includes('vehiculo') || customId.includes('_veh_')) {
             const cmd = client.commands.get('vehiculo');
-            if (cmd) return await cmd.handleVehiculoInteractions(interaction);
-        }
-        if (customId.includes('_veh_')) {
-            const cmd = client.commands.get('vehiculo');
-            if (cmd) return await cmd.handleButtons(interaction);
-        }
-
-        // SISTEMA DE TICKETS
-        try {
-            await handleTicketInteractions(interaction);
-        } catch (error) {
-            console.error("Error en interacción de ticket:", error);
+            if (cmd) return customId.includes('_veh_') ? await cmd.handleButtons(interaction) : await cmd.handleVehiculoInteractions(interaction);
         }
     }
 });
@@ -152,9 +161,7 @@ client.on('interactionCreate', async (interaction) => {
 // --- ⭐ MANEJO DE REACCIONES ---
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
-    if (reaction.partial) {
-        try { await reaction.fetch(); } catch (e) { return; }
-    }
+    if (reaction.partial) try { await reaction.fetch(); } catch (e) { return; }
     
     const cmdApertura = client.commands.get('apertura');
     if (cmdApertura && cmdApertura.handleReactions) {

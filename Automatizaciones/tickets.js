@@ -15,7 +15,7 @@ const { db, getNextTicketId } = require('./firebase');
 /**
  * 🎫 SISTEMA DE TICKETS ELITE - ANDA RP
  * Lógica: Nombre dinámico (Categoría + ID), Jerarquía de 10 niveles y Logs King.
- * Versión: 6.0.0 (Ultra Detailing + VIP Shop Verification)
+ * Versión: 6.5.0 (Full Integration + New Modals)
  */
 
 module.exports = {
@@ -63,23 +63,23 @@ module.exports = {
 
         // --- JERARQUÍA DE MODERACIÓN (ORDENADA DE MENOR A MAYOR) ---
         const staffHierarchy = [
-            '1476765837825277992', // Helper
-            '1476766248242118697', // Mod en pruebas
-            '1476766796861149284', // Mod
-            '1476767536530849822', // Supervision basica
-            '1476767750625038336', // Administrador
-            '1482153188856434828', // Equipo de Compras y Similares
-            '1476768019496829033', // Supervision Avanzada
-            '1476768122915782676', // Manager
-            '1476768405037125885', // Community Manager
-            '1476768951034970253'  // Fundacion
+            '1476765837825277992', // [0] Helper
+            '1476766248242118697', // [1] Mod en pruebas
+            '1476766796861149284', // [2] Mod
+            '1476767536530849822', // [3] Supervision basica
+            '1476767750625038336', // [4] Administrador
+            '1482153188856434828', // [5] Equipo de Compras y Similares
+            '1476768019496829033', // [6] Supervision Avanzada
+            '1476768122915782676', // [7] Manager
+            '1476768405037125885', // [8] Community Manager
+            '1476768951034970253'  // [9] Fundacion
         ];
 
         const configs = {
             general: { cat: '1489831086065324093', role: staffHierarchy[0], n: 'Soporte General', prefix: 'soporte', emoji: '📡' },
             reporte: { cat: '1489831182563672075', role: staffHierarchy[1], n: 'Reportes', prefix: 'reporte', emoji: '🚫' },
             vip: { cat: '1489831182563672075', role: '1476767461024989326', n: 'VIP Prioritario', prefix: 'vip', emoji: '🎫' },
-            alianza: { cat: '1489831357357232218', role: '1476767863636234487', n: 'Alianzas', prefix: 'alianza', emoji: '🤝' }
+            alianza: { cat: '1489831357357232218', role: staffHierarchy[7], n: 'Alianzas', prefix: 'alianza', emoji: '🤝' }
         };
 
         // --- A. SOLICITUD DE MODALES CON VALIDACIÓN VIP ---
@@ -88,67 +88,42 @@ module.exports = {
                 const type = customId.replace('t_', '');
                 const config = configs[type];
 
-                // --- VALIDACIÓN VIP EPHEMERAL ---
                 if (customId === 't_vip' && !member.roles.cache.has('1476765603418079434')) {
                     const noVipEmbed = new EmbedBuilder()
                         .setColor('#ff0000')
                         .setTitle('🔒 Acceso Denegado')
-                        .setDescription(
-                            'Esta categoría es exclusiva para ciudadanos con **Rango VIP**.\n\n' +
-                            '🛒 **¿Quieres adquirirlo?**\n' +
-                            'Visita nuestra tienda para obtener beneficios y atención prioritaria:\n' +
-                            '👉 **https://andarp.web.app/tienda.html**'
-                        )
+                        .setDescription('Esta categoría es exclusiva para ciudadanos con **Rango VIP**.\n\n🛒 **¿Quieres adquirirlo?**\n👉 **https://andarp.web.app/tienda.html**')
                         .setFooter({ text: 'Anda RP - Sistema de Ventas' });
 
                     const shopBtn = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setLabel('Ir a la Tienda')
-                            .setURL('https://andarp.web.app/tienda.html')
-                            .setStyle(ButtonStyle.Link)
+                        new ButtonBuilder().setLabel('Ir a la Tienda').setURL('https://andarp.web.app/tienda.html').setStyle(ButtonStyle.Link)
                     );
-
                     return interaction.reply({ embeds: [noVipEmbed], components: [shopBtn], ephemeral: true });
                 }
 
-                // --- CREACIÓN DE MODALES SEGÚN CATEGORÍA ---
                 const modal = new ModalBuilder()
                     .setCustomId(`modal_t_${type}`)
                     .setTitle(`${config.emoji} Formulario de ${config.n}`);
 
-                // Inputs base
-                const input1 = new TextInputBuilder()
-                    .setCustomId('f_roblox')
-                    .setLabel("Usuario de Roblox")
-                    .setStyle(TextInputStyle.Short)
-                    .setPlaceholder('Tu nombre de usuario...')
-                    .setRequired(true);
-
-                const input2 = new TextInputBuilder()
-                    .setCustomId('f_motivo')
-                    .setLabel("Motivo del Ticket")
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setPlaceholder('Describe detalladamente tu situación...')
-                    .setRequired(true);
-
-                // Si es reporte, agregamos campo de pruebas
-                if (type === 'reporte') {
-                    const input3 = new TextInputBuilder()
-                        .setCustomId('f_pruebas')
-                        .setLabel("Pruebas (Links)")
-                        .setStyle(TextInputStyle.Short)
-                        .setPlaceholder('Imgur, YouTube, Twitch...')
-                        .setRequired(false);
-                    
+                // --- LÓGICA DE CAMPOS SEGÚN CATEGORÍA ---
+                if (type === 'general' || type === 'vip') {
                     modal.addComponents(
-                        new ActionRowBuilder().addComponents(input1), 
-                        new ActionRowBuilder().addComponents(input2),
-                        new ActionRowBuilder().addComponents(input3)
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_roblox').setLabel("Usuario de Roblox").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_motivo').setLabel("Motivo del Ticket").setStyle(TextInputStyle.Paragraph).setRequired(true))
                     );
-                } else {
+                } else if (type === 'reporte') {
                     modal.addComponents(
-                        new ActionRowBuilder().addComponents(input1), 
-                        new ActionRowBuilder().addComponents(input2)
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_reportante').setLabel("Usuario Roblox que reporta").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_reportado_rbx').setLabel("Usuario roblox a reportar").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_reportado_ds').setLabel("Usuario discord a reportar").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_suceso').setLabel("Descripcion del suceso").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                    );
+                } else if (type === 'alianza') {
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_solicitante').setLabel("Nombre usuario Solicitante").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_rol').setLabel("Rol del solicitante dentro del servidor").setStyle(TextInputStyle.Short).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_desc').setLabel("Descripción del servidor").setStyle(TextInputStyle.Paragraph).setRequired(true)),
+                        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('f_invitacion').setLabel("Invitación").setStyle(TextInputStyle.Short).setRequired(true))
                     );
                 }
 
@@ -186,13 +161,9 @@ module.exports = {
                     )
                     .setTimestamp();
 
-                // Mapeo dinámico de campos del modal al embed
+                // Mapeo dinámico de TODOS los campos del modal al embed
                 interaction.fields.fields.forEach(f => {
-                    let label = 'INFORMACIÓN';
-                    if (f.customId === 'f_roblox') label = 'USUARIO ROBLOX';
-                    if (f.customId === 'f_motivo') label = 'MOTIVO';
-                    if (f.customId === 'f_pruebas') label = 'PRUEBAS';
-                    
+                    const label = f.customId.replace('f_', '').toUpperCase().replace('_', ' ');
                     welcomeEmbed.addFields({ name: `🔹 ${label}`, value: `\`\`\`${f.value}\`\`\`` });
                 });
 
@@ -236,20 +207,16 @@ module.exports = {
                     .setAuthor({ name: 'Gestión de Tickets', iconURL: user.displayAvatarURL() })
                     .setDescription(`✅ **¡Ticket Reclamado!**\nEl Staff <@${user.id}> ha tomado el control y te asistirá ahora.`)
                     .setTimestamp();
-                
                 await interaction.reply({ embeds: [claimEmbed] });
 
-                // Log de reclamo
                 const logChan = guild.channels.cache.get(logChannelId);
                 if (logChan) {
-                    logChan.send({ 
-                        embeds: [new EmbedBuilder().setColor('#00ff44').setDescription(`📌 **Reclamo:** <@${user.id}> reclamó el ticket <#${channel.id}>`)] 
-                    });
+                    logChan.send({ embeds: [new EmbedBuilder().setColor('#00ff44').setDescription(`📌 **Reclamo:** <@${user.id}> reclamó el ticket <#${channel.id}>`)] });
                 }
             } catch (e) { console.error(e); }
         }
 
-        // --- D. BOTÓN: ASCENDER (JERARQUÍA COMPLETA + BLOQUEO) ---
+        // --- D. BOTÓN: ASCENDER (SALTO A NIVEL 3 + BLOQUEO) ---
         if (customId === 'ticket_ascender') {
             try {
                 let currentRankIndex = -1;
@@ -259,25 +226,19 @@ module.exports = {
                     }
                 }
 
-                const nextRankIndex = currentRankIndex + 1;
+                // Lógica de Salto: Si es menor a Nivel 3, salta a 3. Si ya es 3+, sube de 1 en 1.
+                let nextRankIndex = (currentRankIndex >= 0 && currentRankIndex < 3) ? 3 : currentRankIndex + 1;
 
                 if (nextRankIndex >= staffHierarchy.length) {
-                    return interaction.reply({ content: '⚠️ El ticket ya alcanzó el rango máximo (**Fundación**).', ephemeral: true });
+                    return interaction.reply({ content: '⚠️ El ticket ya alcanzó el rango máximo.', ephemeral: true });
                 }
 
                 const nextRoleId = staffHierarchy[nextRankIndex];
                 const prevRoleId = currentRankIndex !== -1 ? staffHierarchy[currentRankIndex] : null;
 
-                // 1. Bloqueo de seguridad
                 await channel.permissionOverwrites.edit(user.id, { SendMessages: false });
                 if (prevRoleId) await channel.permissionOverwrites.edit(prevRoleId, { SendMessages: false });
-
-                // 2. Dar acceso al siguiente nivel
-                await channel.permissionOverwrites.edit(nextRoleId, { 
-                    ViewChannel: true, 
-                    SendMessages: true, 
-                    AttachFiles: true 
-                });
+                await channel.permissionOverwrites.edit(nextRoleId, { ViewChannel: true, SendMessages: true, AttachFiles: true });
 
                 const ascEmbed = new EmbedBuilder()
                     .setColor('#ff9900')
@@ -297,20 +258,12 @@ module.exports = {
                     new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger)
                 );
 
-                await interaction.reply({ 
-                    content: `⚠️ **Atención:** <@&${nextRoleId}>`, 
-                    embeds: [ascEmbed], 
-                    components: [ascRow] 
-                });
+                await interaction.reply({ content: `⚠️ **Atención:** <@&${nextRoleId}>`, embeds: [ascEmbed], components: [ascRow] });
 
-                // Log de Ascenso
                 const logChan = guild.channels.cache.get(logChannelId);
                 if (logChan) {
-                    logChan.send({ 
-                        embeds: [new EmbedBuilder().setColor('#ff9900').setDescription(`🚀 **Ascenso:** <#${channel.id}> fue escalado a <@&${nextRoleId}> por <@${user.id}>`)] 
-                    });
+                    logChan.send({ embeds: [new EmbedBuilder().setColor('#ff9900').setDescription(`🚀 **Ascenso:** <#${channel.id}> fue escalado a <@&${nextRoleId}> por <@${user.id}>`)] });
                 }
-
             } catch (err) { console.error(err); }
         }
 

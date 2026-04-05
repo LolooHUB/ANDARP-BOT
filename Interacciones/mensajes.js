@@ -2,7 +2,7 @@ module.exports = {
     async handlePrefixCommands(message) {
         const content = message.content.toLowerCase();
 
-        if (content === '!help') {
+        if (content === '!ayuda') {
             return message.reply("ℹ️ Si necesitas ayuda podes crear un ticket en <#1476763743424610305> o podes ver informacion en <#1476760411310260354>.");
         }
 
