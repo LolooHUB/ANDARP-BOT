@@ -48,8 +48,8 @@ if (fs.existsSync(interaccionesPath)) {
     }
 }
 
-// --- 🚀 EVENTO READY (ACTUALIZADO A clientReady) ---
-client.once('clientReady', async (c) => {
+// --- 🚀 EVENTO READY ---
+client.once('ready', async (c) => {
     console.log(`✅ Anda RP Online: ${c.user.tag}`);
 
     client.user.setPresence({
@@ -98,7 +98,7 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// --- ⚡ MANEJO DE INTERACCIONES (SLASH, BOTONES, MODALES) ---
+// --- ⚡ MANEJO DE INTERACCIONES (SLASH, BOTONES, MODALES, MENÚS) ---
 client.on('interactionCreate', async (interaction) => {
     
     // 1. COMANDOS SLASH
@@ -109,8 +109,7 @@ client.on('interactionCreate', async (interaction) => {
             await command.execute(interaction);
         } catch (error) {
             console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
-            const msgError = { content: 'Hubo un error al ejecutar el comando.', flags: [64] };
-            // Verificación para evitar crash si ya se respondió
+            const msgError = { content: 'Hubo un error al ejecutar el comando.', ephemeral: true };
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp(msgError).catch(() => {});
             } else {
@@ -125,22 +124,46 @@ client.on('interactionCreate', async (interaction) => {
         const { customId } = interaction;
 
         try {
-            // SISTEMA DE TICKETS (Prioritario)
-            // Agregamos una verificación para ver si es de tickets antes de ejecutar
+            // --- 🎫 SISTEMA DE TICKETS ---
             if (customId.includes('ticket') || customId.includes('modal_t_') || customId.includes('modal_final_close') || customId.includes('t_')) {
                 await handleTicketInteractions(interaction);
                 return;
             }
 
-            // REDIRECCIÓN DINÁMICA DE OTROS SISTEMAS
-            if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
-                const cmd = client.commands.get('apertura');
-                if (cmd) return await cmd.handleAperturaInteractions(interaction);
+            // --- 🛒 TIENDA LEGAL ---
+            if (customId === 'comprar_tienda') {
+                const cmd = client.commands.get('tienda');
+                if (cmd) return await cmd.handleTiendaInteractions(interaction);
             }
+
+            // --- 💀 BLACKMARKET ---
+            if (customId === 'comprar_blackmarket') {
+                const cmd = client.commands.get('blackmarket');
+                if (cmd) return await cmd.handleBlackmarketInteractions(interaction);
+            }
+
+            // --- 🆔 CAMBIO DE MATRÍCULAS ---
+            if (customId === 'seleccionar_coche_matricula') {
+                const cmd = client.commands.get('cambiarmatricula');
+                if (cmd) return await cmd.handleMatriculaInteractions(interaction);
+            }
+
+            // --- 🚘 VEHÍCULOS (DGT) ---
+            if (customId.includes('vehiculo') || customId.includes('_veh_') || customId === 'select_tramite_vehiculo' || customId === 'modal_registro_vehiculo') {
+                const cmd = client.commands.get('vehiculo');
+                if (cmd) {
+                    if (customId.includes('_veh_') && interaction.isButton()) return await cmd.handleButtons(interaction);
+                    return await cmd.handleVehiculoInteractions(interaction);
+                }
+            }
+
+            // --- 🪪 DNI ---
             if (customId.includes('dni')) {
                 const cmd = client.commands.get('dni');
                 if (cmd) return await cmd.handleDNIInteractions(interaction);
             }
+
+            // --- 📜 LICENCIAS ---
             if (customId.includes('licencia') || customId.includes('_lic_')) {
                 const cmd = client.commands.get('licencia');
                 if (cmd) {
@@ -148,6 +171,14 @@ client.on('interactionCreate', async (interaction) => {
                     return await cmd.handleLicenciaInteractions(interaction);
                 }
             }
+
+            // --- 🏢 APERTURAS ---
+            if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
+                const cmd = client.commands.get('apertura');
+                if (cmd) return await cmd.handleAperturaInteractions(interaction);
+            }
+
+            // --- 🚔 SANCIONES (POLICÍA) ---
             if (customId.startsWith('modal_multa_')) {
                 const cmd = client.commands.get('multar');
                 if (cmd) return await cmd.handleMultaInteractions(interaction);
@@ -156,18 +187,11 @@ client.on('interactionCreate', async (interaction) => {
                 const cmd = client.commands.get('detencion');
                 if (cmd) return await cmd.handleDetencionInteractions(interaction);
             }
-            // VEHÍCULOS (Actualizado para manejar Menús de Selección)
-            if (customId.includes('vehiculo') || customId.includes('_veh_') || customId === 'select_tramite_vehiculo') {
-                const cmd = client.commands.get('vehiculo');
-                if (cmd) {
-                    if (customId.includes('_veh_')) return await cmd.handleButtons(interaction);
-                    return await cmd.handleVehiculoInteractions(interaction);
-                }
-            }
+
         } catch (error) {
             console.error("❌ Error en interacción:", error);
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'Error al procesar la interacción.', flags: [64] }).catch(() => {});
+                await interaction.reply({ content: 'Error al procesar la interacción.', ephemeral: true }).catch(() => {});
             }
         }
     }

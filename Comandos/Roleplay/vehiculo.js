@@ -1,13 +1,6 @@
 const { 
-    SlashCommandBuilder, 
-    EmbedBuilder, 
-    ActionRowBuilder, 
-    ModalBuilder, 
-    TextInputBuilder, 
-    TextInputStyle,
-    ButtonBuilder,
-    ButtonStyle,
-    StringSelectMenuBuilder
+    SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ModalBuilder, 
+    TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder 
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 
@@ -30,45 +23,30 @@ module.exports = {
             const userRef = db.collection('usuarios_rp').doc(interaction.user.id);
             const doc = await userRef.get();
 
-            if (!doc.exists) {
-                return interaction.reply({ content: "❌ No tienes DNI. Tramita tu identidad primero.", ephemeral: true });
-            }
+            if (!doc.exists) return interaction.reply({ content: "❌ No tienes DNI.", ephemeral: true });
 
             const data = doc.data();
-
-            if (!data.licencias?.conducir?.estado) {
-                return interaction.reply({ 
-                    content: "❌ No puedes realizar trámites vehiculares sin un **Permiso de Conducción** vigente.", 
-                    ephemeral: true 
-                });
-            }
-
             const vehiculosExistentes = data.propiedades || [];
             const esPrimerVehiculo = vehiculosExistentes.length === 0;
 
             if (!esPrimerVehiculo) {
                 const embedMenu = new EmbedBuilder()
-                    .setTitle('🚘 Gestión de Vehículos')
+                    .setTitle('🚘 Gestión de Vehículos - DGT')
                     .setColor('#f1c40f')
-                    .setDescription('Has accedido al sistema de la DGT. ¿Qué trámite deseas realizar?\n\n' +
-                                    '🆕 **A: Registrar nuevo vehículo**\n> Costo de trámite: **$10,000**.\n\n' +
-                                    '📄 **B: Consultar papeles**\n> Selecciona uno de tus vehículos actuales.');
+                    .setDescription('**Tarifas Vigentes:**\n👴 Vehículos Clásicos (< 2015): **15,000€**\n✨ Vehículos Modernos (2015+): **22,000€**\n\n' +
+                                    '🆕 **Registrar nuevo:** Inicia el trámite de matriculación.\n📄 **Consultar:** Mira los papeles de tus coches actuales.')
+                    .setFooter({ text: 'El cobro se realizará al ser aprobado por el Staff.' });
 
                 const selectMenu = new StringSelectMenuBuilder()
                     .setCustomId('select_tramite_vehiculo')
                     .setPlaceholder('Selecciona una opción...')
                     .addOptions([
-                        {
-                            label: 'Registrar Nuevo ($10,000)',
-                            value: 'opcion_nuevo',
-                            emoji: '🆕',
-                            description: 'Inicia el trámite de matriculación.'
-                        },
+                        { label: 'Registrar Nuevo Vehículo', value: 'opcion_nuevo', emoji: '🆕' },
                         ...vehiculosExistentes.map((v, i) => ({
                             label: `${v.modelo}`,
                             value: `ver_${i}`,
                             emoji: '🚗',
-                            description: `Matrícula: ${v.matricula}`
+                            description: `Placa: ${v.matricula}`
                         }))
                     ]);
 
@@ -76,106 +54,108 @@ module.exports = {
                 return interaction.reply({ embeds: [embedMenu], components: [row], ephemeral: true });
             }
 
-            // --- SI ES EL PRIMERO, VA DIRECTO AL MODAL GRATIS ---
+            // Si es el primero, va directo al modal gratis
             return await this.enviarModalRegistro(interaction, true);
 
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: "❌ Error al conectar con la DGT.", ephemeral: true });
+            return interaction.reply({ content: "❌ Error de conexión con el sistema central.", ephemeral: true });
         }
     },
 
     async enviarModalRegistro(interaction, gratis = false) {
-        const titulo = gratis ? '🚗 Primer Registro (GRATIS)' : '🚗 Registro Nuevo ($10,000)';
-        const modal = new ModalBuilder().setCustomId('modal_registro_vehiculo').setTitle(titulo);
+        const modal = new ModalBuilder()
+            .setCustomId('modal_registro_vehiculo')
+            .setTitle(gratis ? '🚗 Primer Registro (GRATIS)' : '🚗 Trámite de Matriculación');
         
         modal.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_modelo').setLabel("Marca y Modelo").setStyle(TextInputStyle.Short).setPlaceholder("Ej: Seat Ibiza / Audi A3").setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_antiguedad').setLabel("Año del vehículo").setStyle(TextInputStyle.Short).setMaxLength(4).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_modelo').setLabel("Marca y Modelo").setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_antiguedad').setLabel("Año del vehículo").setStyle(TextInputStyle.Short).setMaxLength(4).setPlaceholder("Ej: 2012").setRequired(true)),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_color').setLabel("Color principal").setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_desc').setLabel("Descripción / Extras").setStyle(TextInputStyle.Paragraph).setPlaceholder(gratis ? "Primer vehículo gratuito..." : "Justifica el pago de tasas...").setRequired(true))
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('veh_desc').setLabel("Descripción / Extras").setStyle(TextInputStyle.Paragraph).setRequired(true))
         );
         return await interaction.showModal(modal);
     },
 
     async handleVehiculoInteractions(interaction) {
+        // --- MANEJO DE SELECCIÓN EN MENÚ ---
         if (interaction.isStringSelectMenu() && interaction.customId === 'select_tramite_vehiculo') {
             const valor = interaction.values[0];
-            if (valor === 'opcion_nuevo') {
-                return await this.enviarModalRegistro(interaction, false);
-            } else {
-                const index = parseInt(valor.split('_')[1]);
-                const userRef = db.collection('usuarios_rp').doc(interaction.user.id);
-                const doc = await userRef.get();
-                const veh = doc.data().propiedades[index];
+            if (valor === 'opcion_nuevo') return await this.enviarModalRegistro(interaction, false);
+            
+            const index = parseInt(valor.split('_')[1]);
+            const userRef = db.collection('usuarios_rp').doc(interaction.user.id);
+            const doc = await userRef.get();
+            const veh = doc.data().propiedades[index];
 
-                const embedPapeles = new EmbedBuilder()
-                    .setTitle('📄 Documentación Oficial')
-                    .setColor('#2ecc71')
-                    .addFields(
-                        { name: '👤 Titular', value: `${interaction.user.username}`, inline: true },
-                        { name: '🚗 Modelo', value: `${veh.modelo}`, inline: true },
-                        { name: '🆔 Matrícula', value: `**${veh.matricula}**`, inline: true },
-                        { name: '📅 Fecha Reg.', value: `${veh.fecha_registro}`, inline: true },
-                        { name: '✅ Estado', value: 'Circulación Permitida', inline: false }
-                    )
-                    .setFooter({ text: 'Anda RP - Registro Automotor' });
+            const embedPapeles = new EmbedBuilder()
+                .setAuthor({ name: 'DOCUMENTACIÓN OFICIAL DE VEHÍCULO', iconURL: 'https://i.imgur.com/vH8vL4S.png' })
+                .setColor('#2ecc71')
+                .addFields(
+                    { name: '👤 Titular', value: `${interaction.user.username}`, inline: true },
+                    { name: '🚗 Modelo', value: `${veh.modelo}`, inline: true },
+                    { name: '🆔 Matrícula', value: `\`${veh.matricula}\``, inline: true },
+                    { name: '📅 Registro', value: `${veh.fecha_registro}`, inline: true },
+                    { name: '🎨 Color', value: `${veh.color || 'No especificado'}`, inline: true }
+                );
 
-                return interaction.reply({ embeds: [embedPapeles], ephemeral: true });
-            }
+            return interaction.reply({ embeds: [embedPapeles], ephemeral: true });
         }
 
-        if (interaction.isModalSubmit()) {
+        // --- MANEJO DE ENVÍO DE MODAL ---
+        if (interaction.isModalSubmit() && interaction.customId === 'modal_registro_vehiculo') {
             const { fields, user, guild } = interaction;
             const modelo = fields.getTextInputValue('veh_modelo');
-            const año = fields.getTextInputValue('veh_antiguedad');
+            const anio = parseInt(fields.getTextInputValue('veh_antiguedad'));
             const color = fields.getTextInputValue('veh_color');
             const desc = fields.getTextInputValue('veh_desc');
             
-            // Check si es gratis basado en el título del modal o la DB
             const userRef = db.collection('usuarios_rp').doc(user.id);
             const doc = await userRef.get();
-            const esGratis = (doc.data().propiedades || []).length === 0;
+            const data = doc.data();
+            const esGratis = (data.propiedades || []).length === 0;
 
+            // Cálculo de precio
+            const precioBase = anio < 2015 ? 15000 : 22000;
+            const costoFinal = esGratis ? 0 : precioBase;
+
+            // Validación de dinero antes de enviar al staff
+            if (!esGratis && (data.banco || 0) < costoFinal) {
+                return interaction.reply({ content: `❌ No tienes suficientes fondos en el banco (**${costoFinal.toLocaleString()}€**) para iniciar este trámite.`, ephemeral: true });
+            }
+
+            // Generar Matrícula
             const num = Math.floor(1000 + Math.random() * 9000);
             const letras = "BCDFGHJKLMNPRSTVWXYZ";
             let randomLetras = "";
             for (let i = 0; i < 3; i++) randomLetras += letras.charAt(Math.floor(Math.random() * letras.length));
             const matricula = `${num}-${randomLetras}`;
 
-            const ID_CANAL_REVISION = '1490132369175351397';
-
             const embedStaff = new EmbedBuilder()
-                .setTitle(esGratis ? "🎁 Registro Gratuito (Primer Vehículo)" : "🚀 Nueva Solicitud ($10k)")
+                .setTitle(esGratis ? "🎁 Registro GRATIS" : `🚀 Solicitud de Registro ($${costoFinal.toLocaleString()})`)
                 .setColor(esGratis ? '#2ecc71' : '#e67e22')
                 .addFields(
-                    { name: '👤 Propietario', value: `${user}`, inline: true },
-                    { name: '🚗 Vehículo', value: modelo, inline: true },
-                    { name: '🆔 Matrícula', value: `**${matricula}**`, inline: true },
-                    { name: '📝 Detalles', value: desc }
-                )
-                .setTimestamp();
+                    { name: '👤 Usuario', value: `${user}`, inline: true },
+                    { name: '🚗 Modelo/Año', value: `${modelo} (${anio})`, inline: true },
+                    { name: '🆔 Matrícula Gen.', value: `**${matricula}**`, inline: true },
+                    { name: '🎨 Color', value: color, inline: true },
+                    { name: '📝 Motivo', value: desc }
+                );
 
             const botones = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`aprobar_veh_${user.id}_${matricula}_${modelo.replace(/ /g, '-')}`)
-                    .setLabel(esGratis ? 'Aprobar (Gratis)' : 'Cobrar 10k y Aprobar')
+                    .setCustomId(`aprobar_veh_${user.id}_${matricula}_${modelo.replace(/ /g, '-')}_${costoFinal}_${color}`)
+                    .setLabel(esGratis ? 'Aprobar Gratis' : `Cobrar ${costoFinal.toLocaleString()}€ y Aprobar`)
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
                     .setCustomId(`denegar_veh_${user.id}`)
-                    .setLabel('Denegar')
-                    .setStyle(ButtonStyle.Danger)
+                    .setLabel('Denegar').setStyle(ButtonStyle.Danger)
             );
 
-            const canal = guild.channels.cache.get(ID_CANAL_REVISION);
-            if (canal) await canal.send({ embeds: [embedStaff], components: [botones] });
+            const canalStaff = guild.channels.cache.get('1490132369175351397');
+            if (canalStaff) await canalStaff.send({ embeds: [embedStaff], components: [botones] });
 
-            return interaction.reply({ 
-                content: esGratis 
-                    ? `✅ Solicitud enviada. Al ser tu primer vehículo, el trámite es **gratuito**.` 
-                    : `✅ Solicitud enviada. Se te descontarán **$10,000** al ser aprobado.`, 
-                ephemeral: true 
-            });
+            return interaction.reply({ content: `✅ Solicitud enviada correctamente a revisión.`, ephemeral: true });
         }
     },
 
@@ -184,34 +164,45 @@ module.exports = {
         const accion = parts[0]; 
         const targetId = parts[2];
         const matricula = parts[3];
-        const modeloRaw = parts[4];
+        const modelo = parts[4].replace(/-/g, ' ');
+        const costo = parseInt(parts[5]);
+        const color = parts[6];
         
         const docRef = db.collection('usuarios_rp').doc(targetId);
-        const targetUser = await interaction.client.users.fetch(targetId);
-        const modelo = modeloRaw ? modeloRaw.replace(/-/g, ' ') : "Vehículo";
 
         if (accion === 'aprobar') {
             const doc = await docRef.get();
+            if (!doc.exists) return interaction.update({ content: "❌ El usuario ya no existe en la DB.", components: [] });
+
             const data = doc.data();
-            const esGratis = (data.propiedades || []).length === 0;
-            
+            const saldoActual = data.banco || 0;
+
+            // Verificación final de saldo
+            if (saldoActual < costo) {
+                return interaction.update({ content: `❌ Error: El usuario ya no tiene dinero suficiente para pagar las tasas.`, components: [] });
+            }
+
             const nuevoVehiculo = {
                 matricula: matricula,
                 modelo: modelo,
+                color: color,
                 fecha_registro: new Date().toLocaleDateString('es-ES')
             };
 
+            // ACTUALIZAR FIREBASE: Restar dinero + Añadir coche
             await docRef.update({
-                'propiedades': [...(data.propiedades || []), nuevoVehiculo]
+                banco: saldoActual - costo,
+                propiedades: [...(data.propiedades || []), nuevoVehiculo]
             });
 
-            await interaction.update({ content: `✅ Vehículo aprobado para <@${targetId}>.`, embeds: [], components: [] });
+            await interaction.update({ content: `✅ **Aprobado.** Se han cobrado **${costo.toLocaleString()}€** a <@${targetId}>.`, embeds: [], components: [] });
             
-            const msjCosto = esGratis ? "Trámite gratuito por ser tu primer vehículo." : "Se han aplicado los $10,000 de tasas.";
-            try { await targetUser.send(`🚗 **DGT:** Tu vehículo **${modelo}** ha sido aprobado. ${msjCosto}`); } catch(e){}
+            try {
+                const targetUser = await interaction.client.users.fetch(targetId);
+                await targetUser.send(`🚗 **DGT:** Tu vehículo **${modelo}** con matrícula **${matricula}** ha sido registrado con éxito. Se han descontado **${costo.toLocaleString()}€** de tu cuenta.`);
+            } catch(e) {}
         } else {
-            await interaction.update({ content: `❌ Registro denegado.`, embeds: [], components: [] });
-            try { await targetUser.send("⚠️ Tu solicitud de registro de vehículo ha sido rechazada."); } catch(e){}
+            await interaction.update({ content: `❌ Solicitud denegada por el Staff.`, embeds: [], components: [] });
         }
     }
 };
