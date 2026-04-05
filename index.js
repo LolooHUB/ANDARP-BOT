@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, ActivityType, Collection } = require('discord
 const fs = require('fs');
 const path = require('path');
 
-// --- 🎫 IMPORTACIÓN DE TICKETS (Ruta corregida según estructura) ---
+// --- 🎫 IMPORTACIÓN DE TICKETS ---
 const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Automatizaciones/tickets');
 
 const client = new Client({
@@ -16,7 +16,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.prefixInteractions = new Collection(); // Colección para comandos con '!'
+client.prefixInteractions = new Collection(); 
 
 // --- 📂 1. CARGA DE COMANDOS SLASH (/) ---
 const foldersPath = path.join(__dirname, 'Comandos');
@@ -24,8 +24,6 @@ const commandFolders = fs.readdirSync(foldersPath);
 
 for (const folder of commandFolders) {
     const commandsPath = path.join(foldersPath, folder);
-    
-    // Verificamos que sea una carpeta antes de leerla
     if (fs.lstatSync(commandsPath).isDirectory()) {
         const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
         for (const file of commandFiles) {
@@ -91,8 +89,8 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // 2. Ejecución dinámica de la carpeta ./Interacciones
-    const interaccion = client.prefixInteractions.get(commandName);
+    // 2. Ejecución dinámica de la carpeta ./Interacciones (Aca entra despacho)
+    const interaccion = client.prefixInteractions.get(commandName) || client.prefixInteractions.get('despachos');
     if (interaccion && typeof interaccion.execute === 'function') {
         try {
             await interaccion.execute(message, args, client);
@@ -128,7 +126,7 @@ client.on('interactionCreate', async (interaction) => {
             console.error("❌ Error en interacción de ticket:", error);
         }
 
-        // REDIRECCIÓN DINÁMICA DE SISTEMAS (Modales y Botones)
+        // REDIRECCIÓN DINÁMICA DE SISTEMAS
         if (customId.includes('apertura') || customId.includes('confirm_') || customId.includes('abort_')) {
             const cmd = client.commands.get('apertura');
             if (cmd) return await cmd.handleAperturaInteractions(interaction);
@@ -139,7 +137,10 @@ client.on('interactionCreate', async (interaction) => {
         }
         if (customId.includes('licencia') || customId.includes('_lic_')) {
             const cmd = client.commands.get('licencia');
-            if (cmd) return customId.includes('_lic_') ? await cmd.handleButtons(interaction) : await cmd.handleLicenciaInteractions(interaction);
+            if (cmd) {
+                if (customId.includes('_lic_')) return await cmd.handleButtons(interaction);
+                return await cmd.handleLicenciaInteractions(interaction);
+            }
         }
         if (customId.startsWith('modal_multa_')) {
             const cmd = client.commands.get('multar');
@@ -151,7 +152,10 @@ client.on('interactionCreate', async (interaction) => {
         }
         if (customId.includes('vehiculo') || customId.includes('_veh_')) {
             const cmd = client.commands.get('vehiculo');
-            if (cmd) return customId.includes('_veh_') ? await cmd.handleButtons(interaction) : await cmd.handleVehiculoInteractions(interaction);
+            if (cmd) {
+                if (customId.includes('_veh_')) return await cmd.handleButtons(interaction);
+                return await cmd.handleVehiculoInteractions(interaction);
+            }
         }
     }
 });
