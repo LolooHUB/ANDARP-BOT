@@ -17,11 +17,10 @@ module.exports = {
             if (!doc.exists) return interaction.reply({ content: "❌ No tienes DNI. Regístrate primero.", ephemeral: true });
 
             const data = doc.data();
-            const inv = data.inventario || {}; // Firebase guarda esto como objeto { id: cantidad }
+            // IMPORTANTE: Aseguramos que inv sea un objeto {} y no un array []
+            const inv = data.inventario || {}; 
             
-            // Diccionario extendido (Tienda + Blackmarket)
             const nombresItems = {
-                // Legales
                 'celular': '📱 Teléfono Móvil',
                 'mochila': '🎒 Mochila de Cuero',
                 'kit_reparacion': '🛠️ Kit de Reparación',
@@ -30,7 +29,6 @@ module.exports = {
                 'gps': '🗺️ GPS',
                 'botiquin': '🩹 Botiquín',
                 'camara': '📷 Cámara Réflex',
-                // Blackmarket / Ilegales
                 'glock': '🔫 Glock-17 (Ilegal)',
                 'ak47': '⚔️ AK-47 Kalashnikov',
                 'placa_virgen': '🆔 Placa de Matrícula Virgen',
@@ -41,22 +39,19 @@ module.exports = {
                 'muni_762': '🔥 Munición 7.62'
             };
 
-            // Construir lista con formato profesional
-            let itemsTexto = "";
-            const entradas = Object.entries(inv);
+            // Convertimos el objeto en una lista legible
+            const itemsProcesados = Object.entries(inv)
+                .filter(([_, cantidad]) => cantidad > 0) // Solo mostrar lo que tenemos
+                .map(([id, cantidad]) => {
+                    const nombreBonito = nombresItems[id] || `📦 ${id.replace(/_/g, ' ')}`;
+                    return `**x${cantidad}** | ${nombreBonito}`;
+                });
 
-            if (entradas.length > 0) {
-                itemsTexto = entradas
-                    .filter(([_, cantidad]) => cantidad > 0)
-                    .map(([id, cantidad]) => {
-                        const info = nombresItems[id] || `📦 ${id.replace(/_/g, ' ')}`;
-                        return `> **x${cantidad}** | ${info}`;
-                    }).join('\n');
-            } else {
-                itemsTexto = "*Tu mochila está vacía actualmente.*";
-            }
+            const listaFinal = itemsProcesados.length > 0 
+                ? itemsProcesados.join('\n') 
+                : '*Tu mochila está vacía.*';
 
-            // Bypass de imagen
+            // --- BYPASS DE IMAGEN ---
             let logo = null;
             const files = [];
             if (fs.existsSync(RUTA_LOGO)) {
@@ -69,22 +64,22 @@ module.exports = {
                     name: `INVENTARIO: ${interaction.user.username}`, 
                     iconURL: logo ? 'attachment://LogoPFP.png' : null 
                 })
-                .setTitle('🎒 PERTENENCIAS PERSONALES')
-                .setColor(entradas.some(([id]) => ['glock', 'ak47', 'inhibidor'].includes(id)) ? '#2f3136' : '#a67c52')
+                .setTitle('🎒 OBJETOS EN POSESIÓN')
+                .setColor(itemsProcesados.some(i => i.includes('Ilegal')) ? '#2b2d31' : '#a67c52')
                 .setThumbnail(interaction.user.displayAvatarURL())
                 .addFields(
-                    { name: '📂 ARTÍCULOS EN POSESIÓN', value: itemsTexto },
-                    { name: '💰 CAPITAL DISPONIBLE', value: `\`${(data.banco || 0).toLocaleString()}€\``, inline: true },
-                    { name: '⚖️ ESTADO', value: entradas.some(([id]) => ['glock', 'ak47'].includes(id)) ? '⚠️ *Portando Ilegal*' : '✅ *Limpio*', inline: true }
+                    { name: '📥 Artículos', value: listaFinal },
+                    { name: '💳 Banco', value: `\`${(data.banco || 0).toLocaleString()}€\``, inline: true },
+                    { name: '⚖️ Registro', value: itemsProcesados.some(i => i.includes('Ilegal')) ? '⚠️ SOSPECHOSO' : '✅ LIMPIO', inline: true }
                 )
-                .setFooter({ text: 'Anda RP - Sistema de Gestión de Ciudadano' })
+                .setFooter({ text: 'Sistema de Pertenencias Anda RP' })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed], files: files });
 
         } catch (error) {
-            console.error("Error en Mochila Execute:", error);
-            return interaction.reply({ content: "❌ Error al abrir la mochila.", ephemeral: true });
+            console.error("Error en Mochila:", error);
+            return interaction.reply({ content: "❌ Error al acceder a la mochila.", ephemeral: true });
         }
     }
 };
