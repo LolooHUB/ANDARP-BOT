@@ -5,7 +5,7 @@ const fs = require('fs');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('mochila')
-        .setDescription('🎒 Revisa tus pertenencias, dinero e inventario ilegal.'),
+        .setDescription('🎒 Revisa tus pertenencias, dinero e inventario.'),
 
     async execute(interaction) {
         const RUTA_LOGO = './attachments/LogoPFP.png';
@@ -14,44 +14,48 @@ module.exports = {
             const userRef = db.collection('usuarios_rp').doc(interaction.user.id);
             const doc = await userRef.get();
 
-            if (!doc.exists) return interaction.reply({ content: "❌ No tienes DNI. Regístrate primero.", ephemeral: true });
+            if (!doc.exists) return interaction.reply({ content: "❌ No tienes DNI.", ephemeral: true });
 
             const data = doc.data();
-            // IMPORTANTE: Aseguramos que inv sea un objeto {} y no un array []
             const inv = data.inventario || {}; 
-            
-            const nombresItems = {
-                'celular': '📱 Teléfono Móvil',
-                'mochila': '🎒 Mochila de Cuero',
-                'kit_reparacion': '🛠️ Kit de Reparación',
-                'gasolina': '⛽ Bidón de Gasolina',
-                'radio': '📻 Radio Frecuencia',
-                'gps': '🗺️ GPS',
-                'botiquin': '🩹 Botiquín',
-                'camara': '📷 Cámara Réflex',
-                'glock': '🔫 Glock-17 (Ilegal)',
-                'ak47': '⚔️ AK-47 Kalashnikov',
-                'placa_virgen': '🆔 Placa de Matrícula Virgen',
-                'ganzua': '🔐 Ganzúa Profesional',
-                'chaleco_pesado': '🛡️ Chaleco Antibalas Pesado',
-                'inhibidor': '📵 Inhibidor de Señal',
-                'muni_9mm': '📦 Munición 9mm',
-                'muni_762': '🔥 Munición 7.62'
+
+            // --- DICCIONARIO UNIFICADO (MAESTRO) ---
+            const DICCIONARIO_MAESTRO = {
+                'glock': { nombre: 'Glock-17', emoji: '🔫' },
+                'ak47': { nombre: 'AK-47', emoji: '⚔️' },
+                'placa_virgen': { nombre: 'Placa Virgen', emoji: '🆔' },
+                'ganzua': { nombre: 'Ganzúa Pro', emoji: '🔐' },
+                'chaleco_pesado': { nombre: 'Chaleco Pesado', emoji: '🛡️' },
+                'inhibidor': { nombre: 'Inhibidor', emoji: '📵' },
+                'muni_9mm': { nombre: 'Munición 9mm', emoji: '📦' },
+                'muni_762': { nombre: 'Munición 7.62', emoji: '🔥' },
+                'celular': { nombre: 'Teléfono Móvil', emoji: '📱' },
+                'gps': { nombre: 'GPS', emoji: '🗺️' },
+                'radio': { nombre: 'Radio', emoji: '📻' },
+                'mochila': { nombre: 'Mochila', emoji: '🎒' },
+                'kit_reparacion': { nombre: 'Kit de Reparación', emoji: '🛠️' },
+                'botiquin': { nombre: 'Botiquín', emoji: '🩹' },
+                'gasolina': { nombre: 'Bidón de Gasolina', emoji: '⛽' },
+                'camara': { nombre: 'Cámara Réflex', emoji: '📷' }
             };
 
-            // Convertimos el objeto en una lista legible
+            // PROCESAMIENTO DE ITEMS
             const itemsProcesados = Object.entries(inv)
-                .filter(([_, cantidad]) => cantidad > 0) // Solo mostrar lo que tenemos
+                .filter(([_, cantidad]) => cantidad > 0)
                 .map(([id, cantidad]) => {
-                    const nombreBonito = nombresItems[id] || `📦 ${id.replace(/_/g, ' ')}`;
-                    return `**x${cantidad}** | ${nombreBonito}`;
+                    const itemData = DICCIONARIO_MAESTRO[id];
+                    if (itemData) {
+                        return `> ${itemData.emoji} **${itemData.nombre}** x${cantidad}`;
+                    } else {
+                        return `> 📦 **${id.replace(/_/g, ' ')}** x${cantidad}`;
+                    }
                 });
 
             const listaFinal = itemsProcesados.length > 0 
                 ? itemsProcesados.join('\n') 
-                : '*Tu mochila está vacía.*';
+                : '*No llevas nada en los bolsillos.*';
 
-            // --- BYPASS DE IMAGEN ---
+            // BYPASS DE IMAGEN
             let logo = null;
             const files = [];
             if (fs.existsSync(RUTA_LOGO)) {
@@ -61,25 +65,25 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setAuthor({ 
-                    name: `INVENTARIO: ${interaction.user.username}`, 
+                    name: `MOCHILA DE ${interaction.user.username}`, 
                     iconURL: logo ? 'attachment://LogoPFP.png' : null 
                 })
-                .setTitle('🎒 OBJETOS EN POSESIÓN')
-                .setColor(itemsProcesados.some(i => i.includes('Ilegal')) ? '#2b2d31' : '#a67c52')
+                .setTitle('🎒 INVENTARIO PERSONAL')
+                .setColor('#f1c40f')
                 .setThumbnail(interaction.user.displayAvatarURL())
                 .addFields(
-                    { name: '📥 Artículos', value: listaFinal },
-                    { name: '💳 Banco', value: `\`${(data.banco || 0).toLocaleString()}€\``, inline: true },
-                    { name: '⚖️ Registro', value: itemsProcesados.some(i => i.includes('Ilegal')) ? '⚠️ SOSPECHOSO' : '✅ LIMPIO', inline: true }
+                    { name: '🗄️ Objetos', value: listaFinal },
+                    { name: '💰 Banco', value: `\`${(data.banco || 0).toLocaleString()}€\``, inline: true },
+                    { name: '📦 Peso Total', value: `*Calculando...*`, inline: true }
                 )
-                .setFooter({ text: 'Sistema de Pertenencias Anda RP' })
+                .setFooter({ text: 'Anda RP - Gestión de Inventario' })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed], files: files });
 
         } catch (error) {
             console.error("Error en Mochila:", error);
-            return interaction.reply({ content: "❌ Error al acceder a la mochila.", ephemeral: true });
+            return interaction.reply({ content: "❌ Error al abrir la mochila.", ephemeral: true });
         }
     }
 };
