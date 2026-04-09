@@ -74,67 +74,39 @@ module.exports = {
     },
 
     // --- 📥 DETECTAR ENTRADA A SALA DE ESPERA ---
-    async handleWaitingRoom(oldState, newState) {
+async handleWaitingRoom(oldState, newState) {
         if (newState.channelId !== this.salaEsperaId) return;
         const member = newState.member;
-        if (member.user.bot) return;
-
-        const canalTextoEspera = newState.guild.channels.cache.get(this.salaEsperaId);
-        if (!canalTextoEspera) return;
+        
+        // Buscamos el canal de la sala de espera para enviar el mensaje
+        const canalEspera = newState.guild.channels.cache.get(this.salaEsperaId);
+        if (!canalEspera) return console.log("No se encontró el canal de sala de espera.");
 
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#f1c40f')
             .setTitle('🏢 Centro de Visitas - Anda RP')
-            .setDescription(`Bienvenido ${member}.\nPor favor, selecciona abajo el despacho al que deseas solicitar acceso.`)
-            .setFooter({ text: 'El dueño recibirá una notificación inmediata para moverte.' });
+            .setDescription(`Hola ${member}, selecciona a qué despacho deseas solicitar acceso:`)
+            .setFooter({ text: 'Se te moverá automáticamente al ser aceptado.' });
 
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_despacho_espera')
-            .setPlaceholder('Selecciona un despacho...')
+            .setPlaceholder('🚪 Elige un despacho...')
             .addOptions(
                 Object.entries(this.config).map(([id, data]) => ({
                     label: data.nombre,
                     value: id,
-                    emoji: '🚪'
+                    emoji: '📂'
                 }))
             );
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
-        const msgPregunta = await canalTextoEspera.send({ content: `${member}`, embeds: [welcomeEmbed], components: [row] });
 
-        const collector = msgPregunta.createMessageComponentCollector({ 
-            componentType: ComponentType.StringSelect, 
-            time: 60000 
-        });
-
-        collector.on('collect', async i => {
-            if (i.user.id !== member.id) return i.reply({ content: '❌ Esta no es tu solicitud.', ephemeral: true });
-
-            const eleccionId = i.values[0];
-            const dataDespacho = this.config[eleccionId];
-            const canalDueño = i.guild.channels.cache.get(dataDespacho.canalTexto);
-
-            if (!canalDueño) return i.reply({ content: '❌ Error: Canal del despacho no encontrado.', ephemeral: true });
-
-            const rowAcceso = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`apr_desp_${member.id}_${eleccionId}`).setLabel('Permitir Entrada').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId(`den_desp_${member.id}`).setLabel('Denegar').setStyle(ButtonStyle.Danger)
-            );
-
-            const embedNotif = new EmbedBuilder()
-                .setTitle('🔔 Solicitud de Acceso')
-                .setDescription(`El ciudadano ${member} está en la sala de espera y solicita entrar.\n\nAl permitirlo, será **movido automáticamente** al canal de voz.`)
-                .setColor('#e1ff00')
-                .setTimestamp();
-
-            await canalDueño.send({ 
-                content: `<@${eleccionId}>`, 
-                embeds: [embedNotif], 
-                components: [rowAcceso] 
-            });
-
-            await i.update({ content: `⏳ Solicitud enviada al **${dataDespacho.nombre}**. Espera a ser movido...`, embeds: [], components: [] });
-        });
+        // Enviamos el mensaje al chat de la sala de espera
+        await canalEspera.send({ 
+            content: `${member}`, 
+            embeds: [welcomeEmbed], 
+            components: [row] 
+        }).catch(err => console.error("No pude enviar el embed de selección:", err));
     },
 
     // --- 🔓 MANEJO DE BOTONES (Aprobación y Movimiento) ---

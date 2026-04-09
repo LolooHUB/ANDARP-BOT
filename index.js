@@ -189,15 +189,21 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 // -- COSAS DESPACHOS XD 
 
-client.on('voiceStateUpdate', (oldState, newState) => {
-    // Evitar bucles con bots y verificar si se movió a un canal
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    // 1. Verificamos si el usuario entró a un canal (newState.channelId no es nulo)
+    // 2. Verificamos que no sea un bot
     if (newState.member.user.bot) return;
-    
-    // Solo actuar si entró a un canal (no si salió o se ensordeció)
-    if (newState.channelId && newState.channelId !== oldState.channelId) {
-        const despachoCmd = client.commands.get('despacho');
-        if (despachoCmd && newState.channelId === despachoCmd.salaEsperaId) {
-            despachoCmd.handleWaitingRoom(oldState, newState);
+
+    // 3. Obtenemos el comando de la colección
+    const despachoCmd = client.commands.get('despacho');
+    if (!despachoCmd) return;
+
+    // 4. Si el canal al que entró es el de la Sala de Espera
+    if (newState.channelId === despachoCmd.salaEsperaId && oldState.channelId !== newState.channelId) {
+        try {
+            await despachoCmd.handleWaitingRoom(oldState, newState);
+        } catch (error) {
+            console.error("Error al ejecutar handleWaitingRoom:", error);
         }
     }
 });
