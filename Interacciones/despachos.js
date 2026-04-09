@@ -1,7 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const ms = require('ms');
-const { sendTicketPanel } = require('../Automatizaciones/tickets');
-
+const { db } = require('../Comandos/Automatizaciones/firebase');
 /**
  * SISTEMA DE DESPACHOS PROFESIONAL - ANDA RP
  * Incluye: Persistencia, Sala de Espera, Elección Interactiva y Movimiento de Voz.
