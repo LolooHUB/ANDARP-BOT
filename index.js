@@ -186,4 +186,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
     if (cmd?.handleReactions) await cmd.handleReactions(reaction, user);
 });
 
+
+// -- COSAS DESPACHOS XD 
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+    const despachoCmd = client.prefixInteractions.get('despacho');
+    if (despachoCmd?.handleWaitingRoom) {
+        despachoCmd.handleWaitingRoom(oldState, newState);
+    }
+});
+
 client.login(process.env.DISCORD_TOKEN);
