@@ -1,264 +1,239 @@
-const { Client, GatewayIntentBits, ActivityType, Collection, EmbedBuilder } = require('discord.js');
+const { 
+    SlashCommandBuilder, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    ModalBuilder, 
+    TextInputBuilder, 
+    TextInputStyle 
+} = require('discord.js');
+const { db } = require('../Automatizaciones/firebase');
 const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
 
-// --- 🎫 IMPORTACIÓN DE TICKETS ---
-const { handleTicketInteractions, sendTicketPanel } = require('../Automatizaciones/tickets.js');
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('apertura')
+        .setDescription('🚀 Sistema de gestión de sesiones (Votaciones por reacciones).'),
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, 
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessageReactions,
-        GatewayIntentBits.GuildVoiceStates
-    ]
-});
+    async execute(interaction) {
+        // --- 🛡️ RESTRICCIÓN DE ROLES ---
+        const rolesPermitidos = [
+            '1476767461024989326', // STAFF IDs
+            '1476767863636234487',
+            '1476768334048661586',
+            '1476768951034970253'
+        ];
 
-client.commands = new Collection();
-client.prefixInteractions = new Collection(); 
-
-// --- 🛡️ CONFIGURACIÓN DE SEGURIDAD (LISTA BLANCA) ---
-const SERVIDORES_PERMITIDOS = ['1475568777360969932', '1473156452674961502'];
-const CANAL_REPORTES_ID = '1476788899186737172';
-const USER_A_MENCIONAR_ID = '824811313989419018';
-
-// --- 📂 1. CARGA DE COMANDOS SLASH (/) ---
-const foldersPath = path.join(__dirname, 'Comandos');
-const commandFolders = fs.readdirSync(foldersPath);
-
-for (const folder of commandFolders) {
-    const commandsPath = path.join(foldersPath, folder);
-    if (fs.lstatSync(commandsPath).isDirectory()) {
-        const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-        for (const file of commandFiles) {
-            const filePath = path.join(commandsPath, file);
-            const command = require(filePath);
-            if ('data' in command && 'execute' in command) {
-                client.commands.set(command.data.name, command);
-            }
+        const tienePermiso = interaction.member.roles.cache.some(role => rolesPermitidos.includes(role.id));
+        if (!tienePermiso) {
+            return interaction.reply({
+                content: '❌ No tienes los permisos necesarios para gestionar la apertura del servidor.',
+                ephemeral: true
+            });
         }
-    }
-}
 
-// --- 📂 2. CARGA DE INTERACCIONES DE PREFIJO (!) ---
-const interaccionesPath = path.join(__dirname, 'Interacciones');
-if (fs.existsSync(interaccionesPath)) {
-    const interaccionFiles = fs.readdirSync(interaccionesPath).filter(file => file.endsWith('.js'));
-    for (const file of interaccionFiles) {
-        const filePath = path.join(interaccionesPath, file);
-        const interaccion = require(filePath);
-        const name = file.split('.')[0]; 
-        client.prefixInteractions.set(name, interaccion);
-    }
-}
-
-// --- 🚀 EVENTO READY ---
-client.once('ready', async (c) => {
-    console.log(`✅ Anda RP Online: ${c.user.tag}`);
-
-    client.user.setPresence({
-        activities: [{ name: 'Anda RP 🔥', type: ActivityType.Watching }],
-        status: 'online',
-    });
-
-    const { db } = require('./Comandos/Automatizaciones/firebase');
-    const despachoCmd = client.prefixInteractions.get('despacho');
-
-    setInterval(async () => {
-        const ahora = Date.now();
         try {
-            const snapshot = await db.collection('despachos_activos').where('expiracion', '<=', ahora).get();
-            if (snapshot.empty) return;
+            const docRef = db.collection('server_state').doc('current');
+            const stateDoc = await docRef.get();
+            const data = stateDoc.exists ? stateDoc.data() : { open: false, voting: false };
 
-            for (const doc of snapshot.docs) {
-                const data = doc.id.data();
-                const guild = client.guilds.cache.get(data.guildId);
-                if (guild && despachoCmd && typeof despachoCmd.finalizarDespacho === 'function') {
-                    await despachoCmd.finalizarDespacho(guild, doc.id, data.roleId);
-                }
-            }
-        } catch (e) {
-            console.error("❌ Error en revisor de persistencia:", e);
-        }
-    }, 60000);
-
-    const canalTicketsId = '1476763743424610305';
-    const canalTickets = client.channels.cache.get(canalTicketsId);
-
-    if (canalTickets) {
-        try {
-            const mensajes = await canalTickets.messages.fetch({ limit: 50 });
-            if (mensajes.size > 0) {
-                await canalTickets.bulkDelete(mensajes, true).catch(() => {});
-            }
-            await sendTicketPanel(canalTickets);
-            console.log("🎫 Canal de tickets actualizado y panel enviado.");
-        } catch (error) {
-            console.error("❌ Error en auto-panel:", error);
-        }
-    }
-});
-
-// --- 🛡️ EVENTO DE SEGURIDAD: INGRESO A NUEVOS SERVIDORES ---
-client.on('guildCreate', async (guild) => {
-    if (!SERVIDORES_PERMITIDOS.includes(guild.id)) {
-        console.log(`🚨 Intento de ingreso no autorizado en: ${guild.name} (${guild.id})`);
-        const canalReportes = client.channels.cache.get(CANAL_REPORTES_ID);
-        
-        if (canalReportes) {
-            try {
-                const owner = await guild.fetchOwner();
-                const membersCount = guild.memberCount;
-                const embed = new EmbedBuilder()
-                    .setTitle('🚨 INGRESO NO AUTORIZADO DETECTADO')
-                    .setColor('#FF0000')
-                    .setThumbnail(guild.iconURL({ dynamic: true }))
-                    .addFields(
-                        { name: '🏰 Servidor', value: `${guild.name}`, inline: true },
-                        { name: '🆔 ID', value: `${guild.id}`, inline: true },
-                        { name: '👑 Dueño', value: `${owner.user.tag}`, inline: true },
-                        { name: '👥 Miembros', value: `${membersCount}`, inline: true }
-                    )
-                    .setTimestamp();
-
-                await canalReportes.send({ 
-                    content: `<@${USER_A_MENCIONAR_ID}> ¡Atención! El bot fue añadido a un servidor no autorizado.`, 
-                    embeds: [embed] 
+            // 1️⃣ SI HAY UNA VOTACIÓN ACTIVA: Opción de cancelar
+            if (data.voting) {
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm_cancel_vote').setLabel('Cancelar Votación').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('abort_action').setLabel('Mantener').setStyle(ButtonStyle.Secondary)
+                );
+                return interaction.reply({
+                    content: '⚠️ **Hay una votación en curso.** ¿Deseas cancelarla?',
+                    components: [row],
+                    ephemeral: true
                 });
-            } catch (err) {
-                console.error("Error enviando reporte de seguridad:", err);
             }
-        }
-        await guild.leave();
-    }
-});
 
-// --- 💬 MANEJO DE MENSAJES (PREFIX !) ---
-client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.content.startsWith('!')) return;
+            // 2️⃣ SI EL SERVIDOR YA ESTÁ ABIERTO: Opción de cerrar
+            if (data.open) {
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('confirm_open_modal_cierre').setLabel('Cerrar Sesión').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('abort_action').setLabel('Mantener Abierta').setStyle(ButtonStyle.Secondary)
+                );
+                return interaction.reply({
+                    content: '🛑 **El servidor está abierto.** ¿Deseas finalizar la sesión actual?',
+                    components: [row],
+                    ephemeral: true
+                });
+            }
 
-    const args = message.content.slice(1).trim().split(/ +/);
-    const commandName = args.shift().toLowerCase();
+            // 3️⃣ SI NO HAY NADA ACTIVO: Iniciar Setup de Nueva Sesión
+            const modal = new ModalBuilder().setCustomId('modal_setup_rol').setTitle('Configurar Nueva Sesión');
+            
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('hora_rol')
+                        .setLabel("⏰ ¿A qué hora empieza el rol?")
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder("Ej: 22:30 ESP / 18:30 ARG")
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('min_gente')
+                        .setLabel("👥 Mínimo de votos ✅ para abrir")
+                        .setStyle(TextInputStyle.Short)
+                        .setPlaceholder("Solo números (Ej: 12)")
+                        .setMaxLength(2)
+                        .setRequired(true)
+                )
+            );
 
-    if (commandName === 'dinero-give') {
-        const cmdBanco = client.commands.get('banco');
-        if (cmdBanco && cmdBanco.handleAdminGive) {
-            return await cmdBanco.handleAdminGive(message);
-        }
-    }
+            return await interaction.showModal(modal);
 
-    const interaccion = client.prefixInteractions.get(commandName);
-    if (interaccion && typeof interaccion.execute === 'function') {
-        try {
-            await interaccion.execute(message, args, client);
         } catch (error) {
-            console.error(`❌ Error en interaccion !${commandName}:`, error);
+            console.error("Error en Execute Apertura:", error);
+            return interaction.reply({ content: "❌ Error al leer la base de datos.", ephemeral: true });
         }
-    }
-});
+    },
 
-// --- ⚡ MANEJO DE INTERACCIONES (SLASH, BOTONES, MODALES) ---
-client.on('interactionCreate', async (interaction) => {
-    if (interaction.isChatInputCommand()) {
-        const command = client.commands.get(interaction.commandName);
-        if (!command) return;
-        try {
-            await command.execute(interaction);
-        } catch (error) {
-            console.error(`❌ Error ejecutando ${interaction.commandName}:`, error);
-            const msgError = { content: 'Hubo un error al ejecutar el comando.', ephemeral: true };
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp(msgError).catch(() => {});
-            } else {
-                await interaction.reply(msgError).catch(() => {});
-            }
+    // --- MANEJO DE INTERACCIONES (Botones y Modales) ---
+    async handleAperturaInteractions(interaction) {
+        const { customId, fields, guild, user } = interaction;
+        const canalSesiones = guild.channels.cache.get('1489830006979956787');
+        const canalLogs = guild.channels.cache.get('1482565635715109015');
+        const docRef = db.collection('server_state').doc('current');
+
+        if (customId === 'abort_action') {
+            return interaction.update({ content: '✅ Acción cancelada.', components: [], ephemeral: true });
         }
-        return;
-    }
 
-    if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) {
-        const { customId } = interaction;
+        // Cancelar votación
+        if (customId === 'confirm_cancel_vote') {
+            await docRef.update({ voting: false, messageId: null, current_votes: 0 });
+            return interaction.update({ content: '🛑 **Votación cancelada con éxito.**', components: [], ephemeral: true });
+        }
+
+        // Abrir modal de cierre
+        if (customId === 'confirm_open_modal_cierre') {
+            const modalCierre = new ModalBuilder().setCustomId('modal_resumen_cierre').setTitle('Finalizar Sesión');
+            modalCierre.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('resumen_final')
+                        .setLabel("📝 Resumen de la sesión")
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                )
+            );
+            return await interaction.showModal(modalCierre);
+        }
+
+        // Procesar Setup de Votación (Modal)
+        if (customId === 'modal_setup_rol') {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+            
+            const hora = fields.getTextInputValue('hora_rol');
+            const minGente = parseInt(fields.getTextInputValue('min_gente'));
+
+            if (isNaN(minGente)) return interaction.editReply({ content: "❌ Error: El mínimo debe ser un número." });
+
+            const embedVotacion = new EmbedBuilder()
+                .setAuthor({ name: "Anda RP | Gestión de Sesiones", iconURL: guild.iconURL() })
+                .setTitle("📊 Votación de Disponibilidad")
+                .setDescription(`Se ha propuesto una sesión de rol.\n\n**Información:**\n⏰ Hora: **${hora}**\n👥 Mínimo requerido: **${minGente} votos ✅**\n\n**¿Cómo votar?**\n✅ - Participaré\n🟨 - Tarde\n❌ - No asistir`)
+                .setColor(0xF1C40F)
+                .setFooter({ text: "Sistema de Reacciones Activo" });
+
+            const payload = { content: "<@&1476765007344828590>", embeds: [embedVotacion] };
+            if (fs.existsSync('./attachment/BannerVotacion.png')) {
+                embedVotacion.setImage('attachment://BannerVotacion.png');
+                payload.files = ['./attachment/BannerVotacion.png'];
+            }
+
+            const msg = await canalSesiones.send(payload);
+            await msg.react('✅'); await msg.react('🟨'); await msg.react('❌');
+
+            await docRef.set({
+                open: false, voting: true, target_votes: minGente,
+                messageId: msg.id, host: user.id, hora_propuesta: hora
+            });
+
+            return interaction.editReply({ content: "✅ Votación lanzada con éxito." });
+        }
+
+        // Procesar Cierre Final (Modal)
+        if (customId === 'modal_resumen_cierre') {
+            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+            
+            const resumen = fields.getTextInputValue('resumen_final');
+            const fechaCierre = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+
+            await docRef.set({ open: false, voting: false, messageId: null, current_votes: 0 });
+
+            const embedLog = new EmbedBuilder()
+                .setTitle("🛑 Sesión Finalizada")
+                .addFields(
+                    { name: "👤 Host", value: `<@${user.id}>`, inline: true },
+                    { name: "📅 Fecha", value: fechaCierre, inline: true },
+                    { name: "📝 Resumen", value: resumen }
+                )
+                .setColor(0xE74C3C);
+
+            if (canalLogs) await canalLogs.send({ embeds: [embedLog] });
+
+            const embedPublico = new EmbedBuilder().setTitle("🔴 Servidor Cerrado").setColor(0xE74C3C).setTimestamp();
+            const payloadCierre = { content: "<@&1476765007344828590>", embeds: [embedPublico] };
+            
+            if (fs.existsSync('./attachment/BannerCierre.png')) {
+                embedPublico.setImage('attachment://BannerCierre.png');
+                payloadCierre.files = ['./attachment/BannerCierre.png'];
+            }
+
+            await canalSesiones.send(payloadCierre);
+            return interaction.editReply({ content: "✅ Sesión cerrada correctamente." });
+        }
+    },
+
+    // --- LÓGICA DE REACCIONES (Detección de votos) ---
+    async handleReactions(reaction, user) {
         try {
-            // --- 🎫 SISTEMA DE TICKETS ---
-            if (customId.includes('ticket') || customId.includes('modal_t_') || customId.includes('modal_final_close') || customId.includes('t_')) {
-                await handleTicketInteractions(interaction);
-                return;
-            }
+            const docRef = db.collection('server_state').doc('current');
+            const stateDoc = await docRef.get();
+            if (!stateDoc.exists) return;
 
-            // --- 🛒 SISTEMAS DE TIENDAS ---
-            if (customId === 'comprar_tienda') {
-                const cmd = client.commands.get('tienda');
-                if (cmd) return await cmd.handleTiendaInteractions(interaction);
-            }
-            if (customId === 'comprar_blackmarket') {
-                const cmd = client.commands.get('blackmarket');
-                if (cmd) return await cmd.handleBlackmarketInteractions(interaction);
-            }
+            const state = stateDoc.data();
+            if (!state.voting || reaction.message.id !== state.messageId || reaction.emoji.name !== '✅') return;
 
-            // --- 🚗 SISTEMAS DE VEHÍCULOS / MATRÍCULAS ---
-            if (customId === 'seleccionar_coche_matricula') {
-                const cmd = client.commands.get('cambiarmatricula');
-                if (cmd) return await cmd.handleMatriculaInteractions(interaction);
-            }
-            if (customId.includes('vehiculo') || customId.includes('_veh_') || customId === 'select_tramite_vehiculo' || customId === 'modal_registro_vehiculo') {
-                const cmd = client.commands.get('vehiculo');
-                if (cmd) {
-                    if (customId.includes('_veh_') && interaction.isButton()) return await cmd.handleButtons(interaction);
-                    return await cmd.handleVehiculoInteractions(interaction);
+            const votosActuales = reaction.count - 1; // Descontar al bot
+
+            if (votosActuales >= state.target_votes) {
+                await docRef.update({ open: true, voting: false, messageId: null });
+
+                const embedAbierto = new EmbedBuilder()
+                    .setTitle("🟢 ¡Servidor Abierto!")
+                    .setDescription(`Hemos alcanzado los **${state.target_votes}** votos necesarios.\n\n**Código Servidor:** TwjxC\n👤 Host: <@${state.host}>\n\n¡Los esperamos dentro!`)
+                    .setColor(0x2ECC71);
+
+                const payloadOpen = { content: "<@&1476765007344828590>", embeds: [embedAbierto] };
+                if (fs.existsSync('./attachment/BannerVotacionSI.png')) {
+                    embedAbierto.setImage('attachment://BannerVotacionSI.png');
+                    payloadOpen.files = ['./attachment/BannerVotacionSI.png'];
                 }
-            }
 
-            // --- 🪪 DNI Y LICENCIAS ---
-            if (customId.includes('dni')) {
-                const cmd = client.commands.get('dni');
-                if (cmd) return await cmd.handleDNIInteractions(interaction);
-            }
-            if (customId.includes('licencia') || customId.includes('_lic_')) {
-                const cmd = client.commands.get('licencia');
-                if (cmd) {
-                    if (customId.includes('_lic_')) return await cmd.handleButtons(interaction);
-                    return await cmd.handleLicenciaInteractions(interaction);
-                }
-            }
+                await reaction.message.channel.send(payloadOpen);
 
-            // --- 🚀 SISTEMA DE APERTURA (ACTUALIZADO) ---
-            if (
-                customId.includes('apertura') || 
-                customId.includes('confirm_') || 
-                customId.includes('abort_') || 
-                customId.includes('modal_setup') || 
-                customId.includes('modal_resumen')
-            ) {
-                const cmd = client.commands.get('apertura');
-                if (cmd) return await cmd.handleAperturaInteractions(interaction);
+                // Notificar a los que votaron ✅
+                const usuarios = await reaction.users.fetch();
+                usuarios.forEach(async (u) => {
+                    if (u.bot) return;
+                    try {
+                        const embedDM = new EmbedBuilder()
+                            .setTitle("🚀 ¡El servidor ya está abierto!")
+                            .setDescription(`¡Hola ${u.username}! Ya puedes entrar.\n\n**Código:** TwjxC`)
+                            .setColor(0x2ECC71);
+                        await u.send({ embeds: [embedDM] });
+                    } catch (e) { /* DM Bloqueado */ }
+                });
             }
-
-            // --- 👮 POLICÍA (MULTAS / DETENCIÓN) ---
-            if (customId.startsWith('modal_multa_')) {
-                const cmd = client.commands.get('multar');
-                if (cmd) return await cmd.handleMultaInteractions(interaction);
-            }
-            if (customId.startsWith('modal_detencion_')) {
-                const cmd = client.commands.get('detencion');
-                if (cmd) return await cmd.handleDetencionInteractions(interaction);
-            }
-
-        } catch (error) {
-            console.error("❌ Error en interacción:", error);
-        }
+        } catch (error) { console.error("Error handleReactions:", error); }
     }
-});
-
-client.on('messageReactionAdd', async (reaction, user) => {
-    if (user.bot) return;
-    if (reaction.partial) try { await reaction.fetch(); } catch (e) { return; }
-    const cmdApertura = client.commands.get('apertura');
-    if (cmdApertura && cmdApertura.handleReactions) {
-        await cmdApertura.handleReactions(reaction, user);
-    }
-});
-
-client.login(process.env.DISCORD_TOKEN);
+};
