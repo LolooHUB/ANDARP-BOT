@@ -187,29 +187,29 @@ client.on('messageReactionAdd', async (reaction, user) => {
 });
 
 
-// -- COSAS DESPACHOS XD 
+// --- 🏢 SISTEMA DE DESPACHOS (CORREGIDO) ---
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
-    // 1. Verificamos si el usuario entró a un canal (newState.channelId no es nulo)
-    // 2. Verificamos que no sea un bot
     if (newState.member.user.bot) return;
 
-    // 3. Obtenemos el comando de la colección
-    const despachoCmd = client.commands.get('despacho');
+    // IMPORTANTE: Se busca en prefixInteractions, no en commands
+    const despachoCmd = client.prefixInteractions.get('despacho');
     if (!despachoCmd) return;
 
-    // 4. Si el canal al que entró es el de la Sala de Espera
+    // Si entra a la sala de espera
     if (newState.channelId === despachoCmd.salaEsperaId && oldState.channelId !== newState.channelId) {
         try {
             await despachoCmd.handleWaitingRoom(oldState, newState);
         } catch (error) {
-            console.error("Error al ejecutar handleWaitingRoom:", error);
+            console.error("❌ Error en handleWaitingRoom:", error);
         }
     }
 });
 
+// Agregar este bloque dentro de tu client.on('interactionCreate') existente 
+// o dejarlo aquí abajo si prefieres separarlo:
 client.on('interactionCreate', async (interaction) => {
-    const despachoCmd = client.commands.get('despacho');
+    const despachoCmd = client.prefixInteractions.get('despacho');
     if (!despachoCmd) return;
 
     if (interaction.isButton()) {
