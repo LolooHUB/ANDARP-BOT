@@ -44,22 +44,32 @@ module.exports = {
     async execute(message, args) {
         const prefix = '!';
         const fullContent = message.content.trim();
+        // Extraemos el nombre del comando correctamente (despacho o cdespacho)
         const commandName = fullContent.slice(prefix.length).split(/ +/)[0].toLowerCase();
         const targetMember = message.mentions.members.first();
 
-        if (!this.config[message.author.id]) return message.reply('❌ No estás autorizado.');
-
-        if (!targetMember) return message.reply(`📖 Uso: \`${prefix}despacho @usuario [tiempo]\` o \`${prefix}cdespacho @usuario\``);
-
-        if (commandName === 'cdespacho') {
-            await this.finalizarDespacho(message.guild, targetMember.id, this.config[message.author.id].role);
-            return message.reply(`✅ Acceso revocado para ${targetMember}.`);
+        // 1. Verificación de permisos: ¿Es dueño de algún despacho?
+        const configEjecutor = this.config[message.author.id];
+        if (!configEjecutor) {
+            return message.reply('❌ **Error de Permisos:** No estás autorizado para gestionar despachos.');
         }
 
+        // 2. Verificación de mención
+        if (!targetMember) {
+            return message.reply(`📖 **Uso Correcto:**\n✅ Asignar: \`${prefix}despacho @usuario [tiempo]\`\n❌ Cancelar: \`${prefix}cdespacho @usuario\``);
+        }
+
+        // --- LÓGICA DE CANCELACIÓN (!cdespacho) ---
+        if (commandName === 'cdespacho') {
+            await this.finalizarDespacho(message.guild, targetMember.id, configEjecutor.role);
+            return message.reply(`✅ **Acceso Revocado:** Se han retirado los permisos a ${targetMember} y se ha desconectado si estaba en voz.`);
+        }
+
+        // --- LÓGICA DE ASIGNACIÓN (!despacho) ---
         if (commandName === 'despacho') {
             const tiempoRaw = args[1] || '1h';
             await this.asignarDespacho(message.guild, targetMember, message.author.id, tiempoRaw, message.channel.id);
-            return message.reply(`✅ Acceso manual concedido a ${targetMember} por ${tiempoRaw}.`);
+            return message.reply(`✅ **Acceso Concedido:** ${targetMember} ahora tiene acceso por **${tiempoRaw}**.`);
         }
     },
 
