@@ -190,9 +190,14 @@ client.on('messageReactionAdd', async (reaction, user) => {
 // -- COSAS DESPACHOS XD 
 
 client.on('voiceStateUpdate', (oldState, newState) => {
-    const despachoCmd = client.prefixInteractions.get('despacho');
-    if (despachoCmd?.handleWaitingRoom) {
-        despachoCmd.handleWaitingRoom(oldState, newState);
+    const despachoCmd = client.commands.get('despacho'); // O donde lo tengas guardado
+    if (despachoCmd) despachoCmd.handleWaitingRoom(oldState, newState);
+});
+
+client.on('interactionCreate', async (interaction) => {
+    if (interaction.isButton() && (interaction.customId.startsWith('apr_desp') || interaction.customId.startsWith('den_desp'))) {
+        const despachoCmd = client.commands.get('despacho');
+        if (despachoCmd) await despachoCmd.handleButtons(interaction);
     }
 });
 
