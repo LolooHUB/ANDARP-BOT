@@ -4,7 +4,7 @@ const path = require('path');
 require('dotenv').config();
 
 // --- 🎫 IMPORTACIÓN DE TICKETS ---
-const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Automatizaciones/tickets.js');
+const { handleTicketInteractions, sendTicketPanel } = require('../Automatizaciones/tickets.js');
 
 const client = new Client({
     intents: [
