@@ -190,14 +190,32 @@ client.on('messageReactionAdd', async (reaction, user) => {
 // -- COSAS DESPACHOS XD 
 
 client.on('voiceStateUpdate', (oldState, newState) => {
-    const despachoCmd = client.commands.get('despacho'); // O donde lo tengas guardado
-    if (despachoCmd) despachoCmd.handleWaitingRoom(oldState, newState);
+    // Si entra a un canal de voz y ese canal es el de la sala de espera
+    const despachoCmd = client.commands.get('despacho'); 
+    if (despachoCmd && newState.channelId === despachoCmd.salaEsperaId) {
+        despachoCmd.handleWaitingRoom(oldState, newState);
+    }
 });
 
 client.on('interactionCreate', async (interaction) => {
-    if (interaction.isButton() && (interaction.customId.startsWith('apr_desp') || interaction.customId.startsWith('den_desp'))) {
-        const despachoCmd = client.commands.get('despacho');
-        if (despachoCmd) await despachoCmd.handleButtons(interaction);
+    const despachoCmd = client.commands.get('despacho');
+    if (!despachoCmd) return;
+
+    // --- MANEJO DE BOTONES (Aprobar / Denegar) ---
+    if (interaction.isButton()) {
+        if (interaction.customId.startsWith('apr_desp_') || interaction.customId.startsWith('den_desp_')) {
+            await despachoCmd.handleButtons(interaction);
+        }
+    }
+
+    // --- MANEJO DEL DROPBOX (Selección de Despacho) ---
+    // (Opcional si usas el colector interno que pusimos en el comando, 
+    // pero recomendable tenerlo por si el colector expira)
+    if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'select_despacho_espera') {
+            // El colector dentro de handleWaitingRoom ya se encarga, 
+            // pero si quieres que sea global puedes llamarlo aquí.
+        }
     }
 });
 
