@@ -11,31 +11,30 @@ const { db } = require('../Comandos/Automatizaciones/firebase');
 
 /**
  * SISTEMA DE DESPACHOS PROFESIONAL - ANDA RP
- * Funcionalidad: Dropbox de selección, 3 Despachos, Movimiento Automático y !cdespacho.
  */
 
 module.exports = {
     name: 'despacho',
     description: 'Gestiona los roles de despacho con persistencia y sistema de sala de espera.',
 
-    // --- 📂 CONFIGURACIÓN DE DESPACHOS ---
+    // --- 📂 CONFIGURACIÓN DE DESPACHOS (IDs CORREGIDOS) ---
     config: {
         '824811313989419018': { // Lolo_
             role: '1490394005094006876', 
             voice: '1491829800451444746', 
-            canalTexto: '1482564249090658364',
+            canalTexto: '1490391456123326484', // ID Corregido
             nombre: 'Despacho de Lolo_' 
         },
         '1315779036076707902': { // Francisco Javier
             role: '1490394004569722890', 
             voice: '1491829800451444747',
-            canalTexto: '1491839298356379668',
+            canalTexto: '1490391365266313317', // ID Corregido
             nombre: 'Despacho de Francisco Javier' 
         },
         '1324001245735686146': { // Anas
             role: '1490394004569722890', 
             voice: '1491829800451444747',
-            canalTexto: '1491839298356379668',
+            canalTexto: '1491839298356379668', // ID Corregido
             nombre: 'Despacho de Anas' 
         }
     },
@@ -47,45 +46,35 @@ module.exports = {
         const commandName = fullContent.slice(prefix.length).split(/ +/)[0].toLowerCase();
         const targetMember = message.mentions.members.first();
 
-        // 1. Verificación de permisos
         const configEjecutor = this.config[message.author.id];
-        if (!configEjecutor) {
-            return message.reply('❌ **Error:** No estás autorizado para gestionar despachos.');
-        }
+        if (!configEjecutor) return message.reply('❌ No estás autorizado.');
 
-        // 2. Verificación de mención
-        if (!targetMember) {
-            return message.reply(`📖 **Uso Correcto:**\n✅ Asignar: \`${prefix}despacho @usuario [tiempo]\`\n❌ Cancelar: \`${prefix}cdespacho @usuario\``);
-        }
+        if (!targetMember) return message.reply(`📖 Uso: \`!despacho @user [tiempo]\` o \`!cdespacho @user\``);
 
-        // --- LÓGICA DE CANCELACIÓN (!cdespacho) ---
         if (commandName === 'cdespacho') {
             await this.finalizarDespacho(message.guild, targetMember.id, configEjecutor.role);
-            return message.reply(`✅ **Acceso Revocado:** Se han retirado los permisos a ${targetMember}.`);
+            return message.reply(`✅ Acceso revocado a ${targetMember}.`);
         }
 
-        // --- LÓGICA DE ASIGNACIÓN (!despacho) ---
         if (commandName === 'despacho') {
             const tiempoRaw = args[1] || '1h';
-            await this.asignarDespacho(message.guild, targetMember, message.author.id, tiempoRaw, message.channel.id);
-            return message.reply(`✅ **Acceso Concedido:** ${targetMember} por **${tiempoRaw}**.`);
+            await this.asignarDespacho(message.guild, targetMember, message.author.id, tiempoRaw);
+            return message.reply(`✅ Acceso concedido a ${targetMember} por ${tiempoRaw}.`);
         }
     },
 
-    // --- 📥 DETECTAR ENTRADA A SALA DE ESPERA (Llamado desde index.js) ---
     async handleWaitingRoom(oldState, newState) {
         if (newState.channelId !== this.salaEsperaId) return;
         const member = newState.member;
         if (member.user.bot) return;
 
-        // Intentamos obtener el canal (chat de voz o canal de texto de la sala)
-        const canalEspera = newState.guild.channels.cache.get(this.salaEsperaId);
-        if (!canalEspera) return;
+        const channel = newState.channel;
+        if (!channel) return;
 
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#f1c40f')
             .setTitle('🏢 Centro de Visitas - Anda RP')
-            .setDescription(`Hola ${member}, selecciona a qué despacho deseas solicitar acceso:`)
+            .setDescription(`Hola ${member}, selecciona el despacho al que deseas solicitar acceso:`)
             .setFooter({ text: 'Se te moverá automáticamente al ser aceptado.' });
 
         const selectMenu = new StringSelectMenuBuilder()
@@ -101,13 +90,14 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
-        const msgPregunta = await canalEspera.send({ 
+        const msgPregunta = await channel.send({ 
             content: `${member}`, 
             embeds: [welcomeEmbed], 
             components: [row] 
         }).catch(console.error);
 
-        // Colector para el Dropbox
+        if (!msgPregunta) return;
+
         const collector = msgPregunta.createMessageComponentCollector({ 
             componentType: ComponentType.StringSelect, 
             time: 60000 
@@ -120,7 +110,9 @@ module.exports = {
             const dataDespacho = this.config[eleccionId];
             const canalDueño = i.guild.channels.cache.get(dataDespacho.canalTexto);
 
-            if (!canalDueño) return i.reply({ content: '❌ Error: Canal de destino no encontrado.', ephemeral: true });
+            if (!canalDueño) {
+                return i.reply({ content: `❌ Error: No encontré el canal de texto ${dataDespacho.canalTexto}. Revisa los permisos del bot.`, ephemeral: true });
+            }
 
             const rowAcceso = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`apr_desp_${member.id}_${eleccionId}`).setLabel('Permitir Entrada').setStyle(ButtonStyle.Success),
@@ -129,47 +121,42 @@ module.exports = {
 
             await canalDueño.send({ 
                 content: `<@${eleccionId}>`, 
-                embeds: [new EmbedBuilder().setTitle('🔔 Solicitud').setDescription(`${member} solicita entrar a tu despacho.`).setColor('#e1ff00')], 
+                embeds: [new EmbedBuilder()
+                    .setTitle('🔔 Solicitud de Acceso')
+                    .setDescription(`${member} está esperando en la sala.\n\n¿Deseas permitirle la entrada?`)
+                    .setColor('#e1ff00')], 
                 components: [rowAcceso] 
-            });
+            }).catch(e => console.error("Error enviando al canal del dueño:", e));
 
-            await i.update({ content: `⏳ Solicitud enviada al **${dataDespacho.nombre}**. Espera a ser movido...`, embeds: [], components: [] });
+            await i.update({ content: `⏳ Solicitud enviada a **${dataDespacho.nombre}**. Por favor, espera en el canal.`, embeds: [], components: [] });
         });
     },
 
-    // --- 🔓 MANEJO DE BOTONES (Aprobación y Movimiento) ---
     async handleButtons(interaction) {
-        if (!interaction.isButton()) return;
         const [accion, , userId, ownerId] = interaction.customId.split('_');
         
-        if (accion === 'den') {
-            return interaction.update({ content: '❌ Solicitud denegada.', components: [] });
-        }
+        if (accion === 'den') return interaction.update({ content: '❌ Solicitud denegada.', components: [] });
 
         if (accion === 'apr') {
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             const dataDespacho = this.config[ownerId];
 
-            if (!member) return interaction.update({ content: '❌ El usuario ya no está.', components: [] });
+            if (!member) return interaction.update({ content: '❌ El usuario ya no se encuentra en el servidor.', components: [] });
 
-            // 1. Asignar rol y persistencia
             await this.asignarDespacho(interaction.guild, member, ownerId, '1h');
             
-            // 2. MOVIMIENTO AUTOMÁTICO
             if (member.voice.channel) {
-                await member.voice.setChannel(dataDespacho.voice).catch(console.error);
+                await member.voice.setChannel(dataDespacho.voice).catch(err => {
+                    interaction.channel.send(`⚠️ No pude mover a ${member} (Faltan permisos o no está en voz).`);
+                });
             }
 
             await interaction.update({ content: `✅ Acceso concedido a ${member.user.tag}.`, components: [] });
-            
-            const canalEspera = interaction.guild.channels.cache.get(this.salaEsperaId);
-            if (canalEspera) await canalEspera.send(`✅ ${member}, acceso aprobado al **${dataDespacho.nombre}**.`);
         }
     },
 
     async asignarDespacho(guild, targetMember, ejecutorId, tiempoRaw) {
         const config = this.config[ejecutorId];
-        if (!config) return;
         const role = guild.roles.cache.get(config.role);
         const tiempoMs = ms(tiempoRaw);
         if (!tiempoMs || !role) return;
@@ -183,9 +170,7 @@ module.exports = {
                 asignadoPor: ejecutorId
             });
 
-            setTimeout(() => {
-                this.finalizarDespacho(guild, targetMember.id, config.role);
-            }, tiempoMs);
+            setTimeout(() => this.finalizarDespacho(guild, targetMember.id, config.role), tiempoMs);
         } catch (e) { console.error(e); }
     },
 
@@ -196,7 +181,7 @@ module.exports = {
                 if (member.roles.cache.has(roleId)) await member.roles.remove(roleId);
                 if (member.voice.channel) await member.voice.setChannel(null); 
             }
-            await db.collection('despachos_activos').doc(userId).delete();
+            await db.collection('despachos_activos').doc(userId).delete().catch(() => {});
         } catch (e) { console.error(e); }
     }
 };
