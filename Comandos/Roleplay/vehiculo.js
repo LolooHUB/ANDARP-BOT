@@ -12,6 +12,7 @@ module.exports = {
     async execute(interaction) {
         const ID_CANAL_VEHICULOS = '1490146016207573062';
         
+        // Mantenemos ephemeral aquí solo para no ensuciar el canal si alguien se equivoca
         if (interaction.channelId !== ID_CANAL_VEHICULOS) {
             return interaction.reply({ 
                 content: `❌ Este trámite solo se realiza en la oficina de registro: <#${ID_CANAL_VEHICULOS}>.`, 
@@ -51,10 +52,11 @@ module.exports = {
                     ]);
 
                 const row = new ActionRowBuilder().addComponents(selectMenu);
-                return interaction.reply({ embeds: [embedMenu], components: [row], ephemeral: true });
+                // CAMBIO: Ya no es ephemeral
+                return interaction.reply({ embeds: [embedMenu], components: [row], ephemeral: false });
             }
 
-            // Si es el primero, va directo al modal gratis
+            // Si es el primero, va directo al modal (Los modales siempre son privados por naturaleza de Discord)
             return await this.enviarModalRegistro(interaction, true);
 
         } catch (error) {
@@ -78,7 +80,6 @@ module.exports = {
     },
 
     async handleVehiculoInteractions(interaction) {
-        // --- MANEJO DE SELECCIÓN EN MENÚ ---
         if (interaction.isStringSelectMenu() && interaction.customId === 'select_tramite_vehiculo') {
             const valor = interaction.values[0];
             if (valor === 'opcion_nuevo') return await this.enviarModalRegistro(interaction, false);
@@ -99,10 +100,10 @@ module.exports = {
                     { name: '🎨 Color', value: `${veh.color || 'No especificado'}`, inline: true }
                 );
 
-            return interaction.reply({ embeds: [embedPapeles], ephemeral: true });
+            // CAMBIO: Ahora los papeles se muestran públicamente en el canal al consultar
+            return interaction.reply({ embeds: [embedPapeles], ephemeral: false });
         }
 
-        // --- MANEJO DE ENVÍO DE MODAL ---
         if (interaction.isModalSubmit() && interaction.customId === 'modal_registro_vehiculo') {
             const { fields, user, guild } = interaction;
             const modelo = fields.getTextInputValue('veh_modelo');
@@ -115,16 +116,13 @@ module.exports = {
             const data = doc.data();
             const esGratis = (data.propiedades || []).length === 0;
 
-            // Cálculo de precio
             const precioBase = anio < 2015 ? 15000 : 22000;
             const costoFinal = esGratis ? 0 : precioBase;
 
-            // Validación de dinero antes de enviar al staff
             if (!esGratis && (data.banco || 0) < costoFinal) {
                 return interaction.reply({ content: `❌ No tienes suficientes fondos en el banco (**${costoFinal.toLocaleString()}€**) para iniciar este trámite.`, ephemeral: true });
             }
 
-            // Generar Matrícula
             const num = Math.floor(1000 + Math.random() * 9000);
             const letras = "BCDFGHJKLMNPRSTVWXYZ";
             let randomLetras = "";
@@ -132,7 +130,7 @@ module.exports = {
             const matricula = `${num}-${randomLetras}`;
 
             const embedStaff = new EmbedBuilder()
-                .setTitle(esGratis ? "🎁 Registro GRATIS" : `🚀 Solicitud de Registro ($${costoFinal.toLocaleString()})`)
+                .setTitle(esGratis ? "🎁 Registro GRATIS" : `🚀 Solicitud de Registro (${costoFinal.toLocaleString()}€)`)
                 .setColor(esGratis ? '#2ecc71' : '#e67e22')
                 .addFields(
                     { name: '👤 Usuario', value: `${user}`, inline: true },
@@ -155,7 +153,8 @@ module.exports = {
             const canalStaff = guild.channels.cache.get('1490132369175351397');
             if (canalStaff) await canalStaff.send({ embeds: [embedStaff], components: [botones] });
 
-            return interaction.reply({ content: `✅ Solicitud enviada correctamente a revisión.`, ephemeral: true });
+            // CAMBIO: Confirmación pública de que se envió la solicitud
+            return interaction.reply({ content: `✅ **${user.username}**, tu solicitud de matriculación ha sido enviada al departamento de la DGT.`, ephemeral: false });
         }
     },
 
@@ -177,7 +176,6 @@ module.exports = {
             const data = doc.data();
             const saldoActual = data.banco || 0;
 
-            // Verificación final de saldo
             if (saldoActual < costo) {
                 return interaction.update({ content: `❌ Error: El usuario ya no tiene dinero suficiente para pagar las tasas.`, components: [] });
             }
@@ -189,7 +187,6 @@ module.exports = {
                 fecha_registro: new Date().toLocaleDateString('es-ES')
             };
 
-            // ACTUALIZAR FIREBASE: Restar dinero + Añadir coche
             await docRef.update({
                 banco: saldoActual - costo,
                 propiedades: [...(data.propiedades || []), nuevoVehiculo]

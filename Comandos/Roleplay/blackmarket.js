@@ -6,6 +6,7 @@ const {
     AttachmentBuilder 
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
+const fs = require('fs'); // Importamos fs para verificar si existe el archivo (opcional pero recomendado)
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -16,9 +17,6 @@ module.exports = {
         // --- CONFIGURACIÓN DE ENTORNO ---
         const RUTA_LOGO = './attachments/LogoPFP.png';
         
-        // El Mercado Negro NO tiene restricción de canal fija para que el Staff 
-        // pueda mover el punto de rol por el mapa, pero puedes añadirla si quieres.
-
         // --- CATÁLOGO DE CONTRABANDO (SISTEMA DE PESO) ---
         const ILEGALES = [
             { label: 'Glock-17', value: 'glock', price: 45000, emoji: '🔫', weight: 1.5, desc: 'Pistola 9mm semiautomática compacta.' },
@@ -31,15 +29,36 @@ module.exports = {
             { label: 'Munición 7.62 (x30)', value: 'muni_762', price: 12000, emoji: '🔥', weight: 1.2, desc: 'Caja de munición para fusiles.' }
         ];
 
-        try {
-            const logo = new AttachmentBuilder(RUTA_LOGO);
+        let logo = null; // Inicializamos logo como null por defecto
+        const files = []; // Array para los archivos adjuntos
 
+        // --- BYPASS SALVAJE DE IMAGEN ---
+        try {
+            // Verificamos si el archivo existe físicamente antes de intentar crear el attachment
+            if (fs.existsSync(RUTA_LOGO)) {
+                logo = new AttachmentBuilder(RUTA_LOGO);
+                files.push(logo); // Si existe, lo añadimos al array de archivos
+            } else {
+                console.warn(`⚠️ Advertencia: El archivo de logo no se encontró en ${RUTA_LOGO}. Se procederá sin imagen.`);
+            }
+        } catch (error) {
+            // Si hay un error al crear el attachment (ej: permisos), lo capturamos
+            console.error("❌ Error al intentar cargar el logo (Bypasseado):", error);
+            logo = null; // Nos aseguramos de que logo sea null si falla
+        }
+
+        try {
             // --- CONSTRUCCIÓN DE INTERFAZ OSCURA ---
             const embedMercado = new EmbedBuilder()
-                .setAuthor({ name: 'RED DE CONTRABANDO - TRÁFICO ILÍCITO', iconURL: 'attachment://LogoPFP.png' })
+                // Bypass en Author: Si logo existe, usa attachment, si no, null
+                .setAuthor({ 
+                    name: 'RED DE CONTRABANDO - TRÁFICO ILÍCITO', 
+                    iconURL: logo ? 'attachment://LogoPFP.png' : null 
+                })
                 .setTitle('💀 SUMINISTROS DE MERCADO NEGRO')
                 .setColor('#1a1a1a') // Color negro puro
-                .setThumbnail('attachment://LogoPFP.png')
+                // Bypass en Thumbnail: Si logo existe, usa attachment, si no, null
+                .setThumbnail(logo ? 'attachment://LogoPFP.png' : null)
                 .setDescription(
                     'No hagas preguntas, no des nombres. Si el dinero es real, la mercancía también.\n' +
                     '*Las transacciones son irreversibles y no dejan rastro bancario físico.*\n\n' +
@@ -61,19 +80,25 @@ module.exports = {
 
             const fila = new ActionRowBuilder().addComponents(menuClandestino);
 
-            // Sin ephemeral para generar tensión en el rol
+            // Respondemos enviando el array de files (que estará vacío si el logo falló)
             return await interaction.reply({ 
                 embeds: [embedMercado], 
                 components: [fila], 
-                files: [logo] 
+                files: files 
             });
 
         } catch (error) {
             console.error("Error en Blackmarket Execute:", error);
-            return interaction.reply({ content: "❌ El contacto ha desaparecido (Error de carga).", ephemeral: true });
+            // Intentamos responder con un mensaje de error si el reply principal falla
+            if (interaction.replied || interaction.deferred) {
+                return await interaction.followUp({ content: "❌ El contacto ha desaparecido (Error crítico).", ephemeral: true });
+            } else {
+                return await interaction.reply({ content: "❌ El contacto ha desaparecido (Error crítico).", ephemeral: true });
+            }
         }
     },
 
+    // ... (resto del código handleBlackmarketInteractions permanece igual)
     async handleBlackmarketInteractions(interaction) {
         if (!interaction.isStringSelectMenu() || interaction.customId !== 'comprar_blackmarket') return;
 

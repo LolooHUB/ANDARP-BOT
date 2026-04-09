@@ -3,10 +3,10 @@ const {
     EmbedBuilder, 
     ActionRowBuilder, 
     StringSelectMenuBuilder, 
-    AttachmentBuilder,
-    ComponentType 
+    AttachmentBuilder 
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
+const fs = require('fs');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -18,7 +18,7 @@ module.exports = {
         const ID_CANAL_TIENDA = '1490436282873286717';
         const RUTA_LOGO = './attachments/LogoPFP.png';
         
-        // 1. Restricción de Canal para evitar PowerGaming
+        // 1. Restricción de Canal
         if (interaction.channelId !== ID_CANAL_TIENDA) {
             return interaction.reply({ 
                 content: `❌ **Trámite Denegado:** Debes estar físicamente en la tienda oficial: <#${ID_CANAL_TIENDA}>.`, 
@@ -26,7 +26,6 @@ module.exports = {
             });
         }
 
-        // 2. Definición del Catálogo con Atributos de Peso
         const CATALOGO = [
             { label: 'Teléfono Móvil', value: 'celular', price: 1500, emoji: '📱', weight: 0.2, desc: 'Smartphone con servicios digitales.' },
             { label: 'GPS Navegación', value: 'gps', price: 800, emoji: '🗺️', weight: 0.1, desc: 'Mapa satelital de alta precisión.' },
@@ -38,15 +37,29 @@ module.exports = {
             { label: 'Cámara Réflex', value: 'camara', price: 2500, emoji: '📷', weight: 1.5, desc: 'Para periodismo o recolección de pruebas.' }
         ];
 
-        try {
-            const logo = new AttachmentBuilder(RUTA_LOGO);
+        let logo = null;
+        const files = [];
 
-            // 3. Construcción del Embed Principal
+        // --- BYPASS DE IMAGEN ---
+        try {
+            if (fs.existsSync(RUTA_LOGO)) {
+                logo = new AttachmentBuilder(RUTA_LOGO);
+                files.push(logo);
+            }
+        } catch (e) {
+            console.error("Error cargando logo tienda:", e);
+        }
+
+        try {
+            // 3. Construcción del Embed con Bypass
             const embedTienda = new EmbedBuilder()
-                .setAuthor({ name: 'BAZAR CENTRAL - SISTEMA DE SUMINISTROS', iconURL: 'attachment://LogoPFP.png' })
+                .setAuthor({ 
+                    name: 'BAZAR CENTRAL - SISTEMA DE SUMINISTROS', 
+                    iconURL: logo ? 'attachment://LogoPFP.png' : null 
+                })
                 .setTitle('🛒 CATÁLOGO DE PRODUCTOS DISPONIBLES')
                 .setColor('#f1c40f')
-                .setThumbnail('attachment://LogoPFP.png')
+                .setThumbnail(logo ? 'attachment://LogoPFP.png' : null)
                 .setDescription(
                     'Bienvenido al mostrador. Elige los productos que necesites.\n' +
                     '*El cobro se realiza de forma automática desde tu cuenta bancaria.*\n\n' +
@@ -55,7 +68,6 @@ module.exports = {
                 .addFields({ name: '⚠️ Aviso Legal', value: 'No se admiten devoluciones de productos abiertos o usados.' })
                 .setFooter({ text: 'Generalitat de Catalunya - Registro de Comercio' });
 
-            // 4. Creación del Menú de Selección
             const menuSeleccion = new StringSelectMenuBuilder()
                 .setCustomId('comprar_tienda')
                 .setPlaceholder('Haz click aquí para elegir un producto...')
@@ -68,11 +80,10 @@ module.exports = {
 
             const filaAccion = new ActionRowBuilder().addComponents(menuSeleccion);
 
-            // 5. Envío de la Interfaz
             return await interaction.reply({ 
                 embeds: [embedTienda], 
                 components: [filaAccion], 
-                files: [logo] 
+                files: files 
             });
 
         } catch (error) {
@@ -87,7 +98,6 @@ module.exports = {
         const objetoId = interaction.values[0];
         const userId = interaction.user.id;
 
-        // --- MAPEO DE DATOS TÉCNICOS ---
         const ITEMS = {
             'celular': { nombre: 'Teléfono Móvil', costo: 1500, peso: 0.2 },
             'gps': { nombre: 'GPS', costo: 800, peso: 0.1 },
@@ -113,17 +123,14 @@ module.exports = {
             const saldoActual = data.banco || 0;
             const inventarioActual = data.inventario || {};
             
-            // --- LÓGICA DE CAPACIDAD (MOCHILA) ---
             const tieneMochila = inventarioActual['mochila'] > 0;
-            const capacidadMaxima = tieneMochila ? 35.0 : 20.0; // 20kg base, 35kg con mochila
+            const capacidadMaxima = tieneMochila ? 35.0 : 20.0;
             
-            // Calcular peso actual del inventario
             let pesoTotalActual = 0;
             for (const [id, cantidad] of Object.entries(inventarioActual)) {
-                if (ITEMS[id]) pesoTotalActual += (ITEMS[id].peso * cantidad);
+                if (ITEMS[id]) pesoTotalActual += (ITEMS[id].weight * cantidad); // Nota: corregido a .weight
             }
 
-            // 1. Verificación de Saldo
             if (saldoActual < item.costo) {
                 return interaction.update({ 
                     content: `❌ **${interaction.user.username}**, no tienes fondos suficientes.\nCoste: **${item.costo.toLocaleString()}€** | Saldo: **${saldoActual.toLocaleString()}€**`, 
@@ -131,7 +138,6 @@ module.exports = {
                 });
             }
 
-            // 2. Verificación de Espacio
             if (pesoTotalActual + item.peso > capacidadMaxima) {
                 return interaction.update({ 
                     content: `❌ **${interaction.user.username}**, no puedes cargar más peso.\nActual: **${pesoTotalActual.toFixed(2)}kg** / Límite: **${capacidadMaxima}kg**.\n*Sugerencia: Compra una mochila si no tienes una.*`, 
@@ -139,8 +145,6 @@ module.exports = {
                 });
             }
 
-            // --- PROCESO DE COMPRA ---
-            // Sumar cantidad al objeto de inventario
             inventarioActual[objetoId] = (inventarioActual[objetoId] || 0) + 1;
 
             await userRef.update({
@@ -148,19 +152,15 @@ module.exports = {
                 inventario: inventarioActual
             });
 
-            // Registro en Consola para Auditoría
-            console.log(`[SHOP] ${interaction.user.tag} compró ${item.nombre} por ${item.costo}€`);
-
-            // Respuesta Final
             return interaction.update({ 
-                content: `✅ **Compra Exitosa**\n**Producto:** ${item.nombre}\n**Precio:** ${item.costo.toLocaleString()}€\n**Comprador:** <@${userId}>\n\n*El objeto ha sido enviado a tu maletero personal / mochila.*`, 
+                content: `✅ **Compra Exitosa**\n**Producto:** ${item.nombre}\n**Precio:** ${item.costo.toLocaleString()}€\n**Comprador:** <@${userId}>\n\n*El objeto ha sido enviado a tu inventario.*`, 
                 embeds: [], 
                 components: [] 
             });
 
         } catch (error) {
             console.error("Error en Transacción de Tienda:", error);
-            return interaction.update({ content: "❌ Error interno al procesar el pago. Contacta con un técnico.", embeds: [], components: [] });
+            return interaction.update({ content: "❌ Error interno al procesar el pago.", embeds: [], components: [] });
         }
     }
 };

@@ -41,11 +41,11 @@ module.exports = {
 
                 const modal = new ModalBuilder().setCustomId('modal_crear_dni').setTitle('🪪 Registro Civil - Catalunya');
                 modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_nombre').setLabel("Nombre y Apellidos completos").setStyle(TextInputStyle.Short).setPlaceholder("Ej: Jordi Pujol").setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_nombre').setLabel("Nombre y Apellidos completos").setStyle(TextInputStyle.Short).setPlaceholder("Ej: Pedro Sanchez").setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_edad').setLabel("Edad").setStyle(TextInputStyle.Short).setMaxLength(2).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_genero').setLabel("Género").setStyle(TextInputStyle.Short).setPlaceholder("Hombre / Mujer / Otro").setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_genero').setLabel("Género").setStyle(TextInputStyle.Short).setPlaceholder("Hombre / Mujer / Helicoptero Apache / Otro").setRequired(true)),
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_nacimiento').setLabel("Fecha de Nacimiento").setStyle(TextInputStyle.Short).setPlaceholder("DD/MM/AAAA").setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_nacionalidad').setLabel("Nacionalidad").setStyle(TextInputStyle.Short).setPlaceholder("Ej: Catalana").setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('dni_nacionalidad').setLabel("Nacionalidad").setStyle(TextInputStyle.Short).setPlaceholder("Ej: Africano").setRequired(true))
                 );
                 return await interaction.showModal(modal);
             }
