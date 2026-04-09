@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const ms = require('ms');
-const { db } = require('../Comandos/Automatizaciones/firebase');
+const { sendTicketPanel } = require('../Automatizaciones/tickets');
 
 /**
  * SISTEMA DE DESPACHOS PROFESIONAL - ANDA RP
