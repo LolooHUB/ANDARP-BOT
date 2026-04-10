@@ -9,23 +9,31 @@ const {
     TextInputBuilder, 
     TextInputStyle,
     Collection, 
-    AttachmentBuilder
+    AttachmentBuilder,
+    Events
 } = require('discord.js');
 const { db, getNextTicketId } = require('./firebase');
 const transcripts = require('discord-html-transcripts');
 
 /**
- * 🎫 SISTEMA DE TICKETS ELITE - ANDA RP
+ * 🎫 SISTEMA DE TICKETS ELITE V3.0 - ANDA RP
  * ---------------------------------------------------------
- * Lógica: Nombre dinámico, Jerarquía de 10 niveles, 
- * Derivación y Transcripción Web vinculada a Firebase.
+ * Desarrollado para una gestión administrativa de alto rendimiento.
+ * * Capas de Funcionalidad:
+ * 1. Categorización Inteligente (General, Reportes, Alianzas, VIP).
+ * 2. Jerarquía Dinámica de 10 Niveles con Escalado Automático.
+ * 3. Integración con Firebase Firestore para persistencia de datos.
+ * 4. Transcripción Web con renderizado HTML y alojamiento externo.
+ * 5. Sistema de Auditoría (Logs) y Control de Seguridad (Permissions).
+ * 6. UX Optimizada mediante Modales y Botones Interactivos.
  * ---------------------------------------------------------
  */
 
 module.exports = {
 
     /**
-     * @section 1. CONFIGURACIÓN DE CONSTANTES Y ROLES
+     * @section 1. CONFIGURACIÓN DE IDENTIFICADORES Y ASSETS
+     * Variables globales que definen el comportamiento del ecosistema.
      */
     LOG_CHANNEL_ID: '1476799509207060551',
     ROL_COMPRAS_ID: '1482153188856434828',
@@ -35,7 +43,8 @@ module.exports = {
     TRANSCRIPT_BASE_URL: 'https://andarp.web.app/tickets.html?id=',
 
     /**
-     * @section 2. JERARQUÍA DE STAFF (10 NIVELES)
+     * @section 2. ESCALAFÓN JERÁRQUICO (STAFF)
+     * Índices del 0 al 9 que controlan el acceso progresivo.
      */
     STAFF_HIERARCHY: [
         '1476765837825277992', // [0] Helper
@@ -51,17 +60,17 @@ module.exports = {
     ],
 
     /**
-     * @section 3. GENERACIÓN DEL PANEL PRINCIPAL
-     * Función encargada de desplegar el mensaje inicial de soporte.
+     * @section 3. PANEL DE CONTROL DE ENTRADA
+     * Despliega el Embed principal con el que interactúan los usuarios.
      */
     async sendTicketPanel(channel) {
         if (!channel) {
-            console.error("❌ [ERROR] El canal proporcionado para el panel es nulo.");
+            console.error("❌ [ERROR] Canal de panel no definido.");
             return;
         }
 
         try {
-            console.log(`🛠️ [SISTEMA] Iniciando despliegue de panel en #${channel.name}`);
+            console.log(`🛠️ [SISTEMA] Desplegando panel en el canal: #${channel.name}`);
             
             const embed = new EmbedBuilder()
                 .setColor('#e1ff00')
@@ -83,8 +92,10 @@ module.exports = {
                     name: 'Gestión de Soporte Anda RP', 
                     iconURL: 'attachment://LogoPFP.png' 
                 })
+                .setImage('attachment://LogoPFP.png')
+                .setThumbnail('attachment://LogoPFP.png')
                 .setFooter({ 
-                    text: 'Anda RP - Sistema de Atención Automatizado', 
+                    text: 'Anda RP - Sistema de Atención Automatizado • ' + new Date().getFullYear(), 
                     iconURL: 'attachment://LogoPFP.png' 
                 })
                 .setTimestamp();
@@ -114,96 +125,104 @@ module.exports = {
                 files: [this.LOGO_PATH] 
             });
             
-            console.log("✅ [SISTEMA] Panel desplegado satisfactoriamente.");
+            console.log("✅ [SISTEMA] El panel ha sido enviado con éxito.");
         } catch (e) {
-            console.error("❌ [ERROR] Fallo crítico en sendTicketPanel:", e);
+            console.error("❌ [CRITICAL ERROR] Fallo en sendTicketPanel:", e);
         }
     },
 
     /**
-     * @section 4. MANEJO CENTRALIZADO DE INTERACCIONES
-     * Procesa botones, envío de modales y gestión de permisos.
+     * @section 4. HANDLER CENTRAL DE INTERACCIONES
+     * Gestiona el flujo completo: Botones -> Modales -> Creación -> Gestión Interna.
      */
     async handleTicketInteractions(interaction) {
         if (!interaction.guild) return;
         
         const { customId, guild, member, user, channel, fields } = interaction;
-        
-        // Mapeo de configuraciones por categoría
+
+        // Estructura de mapeo para configuración de tickets
         const configs = {
             general: { 
                 cat: '1489831086065324093', 
                 role: this.STAFF_HIERARCHY[0], 
                 n: 'Soporte General', 
                 prefix: 'soporte', 
-                emoji: '📡' 
+                emoji: '📡',
+                color: '#2ecc71'
             },
             reporte: { 
                 cat: '1489831182563672075', 
                 role: this.STAFF_HIERARCHY[1], 
                 n: 'Reportes', 
                 prefix: 'reporte', 
-                emoji: '🚫' 
+                emoji: '🚫',
+                color: '#e74c3c'
             },
             vip: { 
                 cat: '1489831182563672075', 
                 role: this.STAFF_HIERARCHY[2], 
                 n: 'VIP Prioritario', 
                 prefix: 'vip', 
-                emoji: '🎫' 
+                emoji: '🎫',
+                color: '#f1c40f'
             },
             alianza: { 
                 cat: '1489831357357232218', 
                 role: this.STAFF_HIERARCHY[7], 
                 n: 'Alianzas', 
                 prefix: 'alianza', 
-                emoji: '🤝' 
+                emoji: '🤝',
+                color: '#3498db'
             }
         };
 
-        // --- SUBSECCIÓN A: LANZAMIENTO DE MODALES ---
+        // --- SUB-HANDLER: LANZAMIENTO DE FORMULARIOS (MODALES) ---
         if (['t_general', 't_vip', 't_reporte', 't_alianza'].includes(customId)) {
             const type = customId.replace('t_', '');
             const config = configs[type];
 
-            // Verificación de Rango VIP
+            // Bloqueo de seguridad para tickets VIP
             if (customId === 't_vip' && !member.roles.cache.has(this.ROL_VIP_ID)) {
-                console.log(`⚠️ [ACCESO] Intento VIP denegado para ${user.tag}`);
                 const noVipEmbed = new EmbedBuilder()
                     .setColor('#ff0000')
                     .setTitle('🔒 Acceso Denegado')
                     .setDescription('Este canal es exclusivo para miembros con **Rango VIP**.\n\nSi deseas adquirir un rango para atención prioritaria y beneficios, visita nuestra tienda.')
-                    .setFooter({ text: 'Anda RP - Tienda Oficial' });
+                    .setThumbnail('attachment://LogoPFP.png');
 
                 const shopBtn = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
-                        .setLabel('Ir a la Tienda')
+                        .setLabel('Ir a la Tienda Oficial')
                         .setURL(this.TIENDA_URL)
                         .setStyle(ButtonStyle.Link)
                 );
-                return interaction.reply({ embeds: [noVipEmbed], components: [shopBtn], ephemeral: true });
+                return interaction.reply({ 
+                    embeds: [noVipEmbed], 
+                    components: [shopBtn], 
+                    files: [this.LOGO_PATH],
+                    ephemeral: true 
+                });
             }
 
             const modal = new ModalBuilder()
                 .setCustomId(`modal_t_${type}`)
-                .setTitle(`Formulario: ${config.n}`);
+                .setTitle(`${config.emoji} Formulario: ${config.n}`);
 
-            // Estructuras de formularios según el tipo
+            // Inyección dinámica de campos según tipo
             if (type === 'general' || type === 'vip') {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
                             .setCustomId('f_roblox')
-                            .setLabel("Tu nombre de usuario en Roblox")
-                            .setPlaceholder("Ej: JuanPerez123")
+                            .setLabel("Usuario de Roblox")
+                            .setPlaceholder("Ingresa tu nick exacto...")
                             .setStyle(TextInputStyle.Short)
                             .setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
                             .setCustomId('f_motivo')
-                            .setLabel("Describe detalladamente tu motivo")
-                            .setPlaceholder("Explica en qué podemos ayudarte...")
+                            .setLabel("Descripción del Problema")
+                            .setPlaceholder("Detalla en qué podemos ayudarte hoy...")
                             .setStyle(TextInputStyle.Paragraph)
                             .setRequired(true)
                     )
@@ -212,70 +231,41 @@ module.exports = {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
-                            .setCustomId('f_reportante')
-                            .setLabel("Tu Usuario de Roblox")
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
+                            .setCustomId('f_reportante').setLabel("Tu Usuario de Roblox").setStyle(TextInputStyle.Short).setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
-                            .setCustomId('f_reportado_rbx')
-                            .setLabel("Usuario de Roblox del Infractor")
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
+                            .setCustomId('f_reportado_rbx').setLabel("Infractor (Roblox)").setStyle(TextInputStyle.Short).setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
-                            .setCustomId('f_reportado_ds')
-                            .setLabel("Tag de Discord del Infractor")
-                            .setPlaceholder("Ej: usuario#0000 o ID")
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
+                            .setCustomId('f_reportado_ds').setLabel("Infractor (Discord/ID)").setStyle(TextInputStyle.Short).setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
-                            .setCustomId('f_suceso')
-                            .setLabel("Descripción de los hechos")
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(true)
+                            .setCustomId('f_suceso').setLabel("Relato de los hechos").setStyle(TextInputStyle.Paragraph).setRequired(true)
                     )
                 );
             } else if (type === 'alianza') {
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('f_solicitante')
-                            .setLabel("Nombre del Solicitante / Comunidad")
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
+                        new TextInputBuilder().setCustomId('f_solicitante').setLabel("Comunidad/Representante").setStyle(TextInputStyle.Short).setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('f_rol')
-                            .setLabel("Tu cargo en dicha comunidad")
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
+                        new TextInputBuilder().setCustomId('f_rol').setLabel("Tu Cargo").setStyle(TextInputStyle.Short).setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('f_desc')
-                            .setLabel("Propuesta de Alianza")
-                            .setStyle(TextInputStyle.Paragraph)
-                            .setRequired(true)
+                        new TextInputBuilder().setCustomId('f_desc').setLabel("Propuesta Comercial/Alianza").setStyle(TextInputStyle.Paragraph).setRequired(true)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new TextInputBuilder()
-                            .setCustomId('f_invitacion')
-                            .setLabel("Enlace permanente de invitación")
-                            .setStyle(TextInputStyle.Short)
-                            .setRequired(true)
+                        new TextInputBuilder().setCustomId('f_invitacion').setLabel("Link de Invitación").setStyle(TextInputStyle.Short).setRequired(true)
                     )
                 );
             }
             return await interaction.showModal(modal);
         }
 
-        // --- SUBSECCIÓN B: PROCESAMIENTO Y CREACIÓN DE CANAL ---
+        // --- SUB-HANDLER: PROCESAMIENTO DE CREACIÓN DE TICKETS ---
         if (interaction.isModalSubmit() && customId.startsWith('modal_t_')) {
             await interaction.deferReply({ ephemeral: true });
             
@@ -289,10 +279,7 @@ module.exports = {
                     type: ChannelType.GuildText,
                     parent: config.cat,
                     permissionOverwrites: [
-                        { 
-                            id: guild.id, 
-                            deny: [PermissionFlagsBits.ViewChannel] 
-                        },
+                        { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                         { 
                             id: user.id, 
                             allow: [
@@ -315,22 +302,25 @@ module.exports = {
                 });
 
                 const welcomeEmbed = new EmbedBuilder()
-                    .setColor('#e1ff00')
+                    .setColor(config.color)
                     .setTitle(`${config.emoji} Ticket | ${config.n} #${ticketId}`)
                     .setDescription(
                         `Hola <@${user.id}>, gracias por contactar con **Anda RP**.\n` +
                         `Un miembro del equipo de **${config.n}** ha sido notificado y te atenderá a la brevedad.\n\n` +
-                        `Recuerda mantener un lenguaje adecuado y tener paciencia.`
+                        `**Reglas Generales:**\n` +
+                        `1. No menciones masivamente al Staff.\n` +
+                        `2. Prepara tus pruebas (capturas/videos).\n` +
+                        `3. Mantén el respeto en todo momento.`
                     )
                     .setThumbnail(user.displayAvatarURL({ dynamic: true }))
                     .addFields(
-                        { name: '👤 Usuario', value: `\`${user.tag}\``, inline: true },
-                        { name: '🆔 ID de Usuario', value: `\`${user.id}\``, inline: true }
+                        { name: '👤 Solicitante', value: `\`${user.tag}\``, inline: true },
+                        { name: '🆔 User ID', value: `\`${user.id}\``, inline: true }
                     )
                     .setTimestamp()
-                    .setFooter({ text: 'Gestión Interna de Soporte', iconURL: guild.iconURL() });
+                    .setFooter({ text: 'Sistema de Gestión Interna • Anda RP', iconURL: guild.iconURL() });
 
-                // Iteración de campos del modal para añadirlos al embed
+                // Extracción automática de datos del modal para el Embed de bienvenida
                 fields.fields.forEach(f => {
                     const label = f.customId.replace('f_', '').toUpperCase();
                     welcomeEmbed.addFields({ 
@@ -341,26 +331,10 @@ module.exports = {
                 });
 
                 const actionRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('ticket_reclamar')
-                        .setLabel('Reclamar')
-                        .setEmoji('📌')
-                        .setStyle(ButtonStyle.Success),
-                    new ButtonBuilder()
-                        .setCustomId('ticket_ascender')
-                        .setLabel('Ascender')
-                        .setEmoji('🚀')
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId('ticket_compras')
-                        .setLabel('Derivar Compras')
-                        .setEmoji('💰')
-                        .setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder()
-                        .setCustomId('ticket_cerrar')
-                        .setLabel('Cerrar Ticket')
-                        .setEmoji('🔒')
-                        .setStyle(ButtonStyle.Danger)
+                    new ButtonBuilder().setCustomId('ticket_reclamar').setLabel('Reclamar').setEmoji('📌').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('ticket_ascender').setLabel('Ascender').setEmoji('🚀').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('ticket_compras').setLabel('Compras').setEmoji('💰').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar').setEmoji('🔒').setStyle(ButtonStyle.Danger)
                 );
 
                 await tChannel.send({ 
@@ -370,36 +344,41 @@ module.exports = {
                     files: [this.LOGO_PATH] 
                 });
 
-                // Registro en Logs
+                // Registro Auditor en Logs
                 const logChan = guild.channels.cache.get(this.LOG_CHANNEL_ID);
                 if (logChan) {
                     const logEmbed = new EmbedBuilder()
                         .setColor('#2ecc71')
-                        .setTitle('🎫 Ticket Apertura')
+                        .setTitle('🎫 Nueva Apertura de Ticket')
                         .addFields(
                             { name: 'Canal', value: `${tChannel}`, inline: true },
                             { name: 'Usuario', value: `${user.tag}`, inline: true },
-                            { name: 'Categoría', value: config.n, inline: true }
+                            { name: 'Categoría', value: config.n, inline: true },
+                            { name: 'ID Sistema', value: `#${ticketId}`, inline: true }
                         )
                         .setTimestamp();
                     await logChan.send({ embeds: [logEmbed] });
                 }
 
-                await interaction.editReply(`✅ Tu ticket ha sido generado correctamente en: ${tChannel}`);
+                await interaction.editReply(`✅ Tu ticket ha sido generado correctamente: ${tChannel}`);
             } catch (error) {
-                console.error("❌ [ERROR] Creación de canal fallida:", error);
-                await interaction.editReply("Hubo un error al intentar crear el canal de ticket.");
+                console.error("❌ [ERROR] Fallo en la creación del ticket:", error);
+                await interaction.editReply("Hubo un error crítico al intentar procesar tu solicitud.");
             }
         }
 
-        // --- SUBSECCIÓN C: LÓGICA DE BOTONES INTERNOS DEL TICKET ---
+        // --- SUB-HANDLER: ACCIONES INTERNAS (BOTONES DEL CANAL) ---
 
-        /** * RECLAMAR TICKET 
-         */
+        // 1. RECLAMAR TICKET
         if (customId === 'ticket_reclamar') {
+            if (!this.validateStaffPermissions(member)) {
+                return interaction.reply({ content: '❌ Solo el Staff puede reclamar tickets.', ephemeral: true });
+            }
+
             const claimEmbed = new EmbedBuilder()
                 .setColor('#00ff44')
-                .setDescription(`✅ **Ticket Reclamado:** El Staff <@${user.id}> se encargará de tu caso.`);
+                .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
+                .setDescription(`✅ **Caso Tomado:** El Staff <@${user.id}> ha tomado este ticket y será tu soporte principal.`);
             
             await interaction.reply({ embeds: [claimEmbed] });
             
@@ -408,24 +387,20 @@ module.exports = {
                     await channel.setName(`atendido-${channel.name}`);
                 }
             } catch (setNameErr) {
-                console.warn("⚠️ No se pudo renombrar el canal (Falta de permisos o Rate Limit)");
+                console.warn("⚠️ Rate limit al renombrar canal.");
             }
         }
 
-        /** * DERIVAR A COMPRAS 
-         */
+        // 2. DERIVAR A COMPRAS
         if (customId === 'ticket_compras') {
             await channel.permissionOverwrites.edit(this.ROL_COMPRAS_ID, { 
-                ViewChannel: true, 
-                SendMessages: true,
-                AttachFiles: true,
-                ReadMessageHistory: true 
+                ViewChannel: true, SendMessages: true, AttachFiles: true, ReadMessageHistory: true 
             });
             
             const derivEmbed = new EmbedBuilder()
                 .setColor('#5865F2')
-                .setTitle('💰 Derivación Administrativa')
-                .setDescription('Este ticket ha sido derivado al **Equipo de Compras y Donaciones**.\nUn encargado de tesorería te asistirá en breve.');
+                .setTitle('💰 Derivación a Tesorería')
+                .setDescription('El caso ha sido movido al departamento de **Compras y Donaciones**.\n\nPor favor, adjunta el comprobante de pago o el error de la tienda.');
             
             await interaction.reply({ 
                 content: `<@&${this.ROL_COMPRAS_ID}>`, 
@@ -433,65 +408,61 @@ module.exports = {
             });
         }
 
-        /** * SISTEMA DE ESCALADO (ASCENDER) 
-         */
+        // 3. SISTEMA DE ESCALADO JERÁRQUICO
         if (customId === 'ticket_ascender') {
+            if (!this.validateStaffPermissions(member)) {
+                return interaction.reply({ content: '❌ No tienes permisos para escalar casos.', ephemeral: true });
+            }
+
             let currentRankIndex = -1;
-            
-            // Detectar rango actual basado en los permisos del canal
             for (let i = 0; i < this.STAFF_HIERARCHY.length; i++) {
                 if (channel.permissionOverwrites.cache.has(this.STAFF_HIERARCHY[i])) {
                     currentRankIndex = i;
                 }
             }
 
-            // Lógica de salto de nivel (Helper -> Mod, o niveles superiores)
+            // Saltos inteligentes (Helper a Mod / Mod a Admin)
             let nextRankIndex = (currentRankIndex >= 0 && currentRankIndex < 3) ? 3 : currentRankIndex + 1;
             
             if (nextRankIndex >= this.STAFF_HIERARCHY.length) {
-                return interaction.reply({ 
-                    content: '❌ Este ticket ya se encuentra en el nivel jerárquico máximo.', 
-                    ephemeral: true 
-                });
+                return interaction.reply({ content: '❌ Este caso ya está en el nivel máximo de administración.', ephemeral: true });
             }
 
             const nextRoleId = this.STAFF_HIERARCHY[nextRankIndex];
             
             try {
-                // Bloquear escritura al staff actual (opcional) y permitir al nuevo rango
                 await channel.permissionOverwrites.edit(nextRoleId, { 
-                    ViewChannel: true, 
-                    SendMessages: true, 
-                    ReadMessageHistory: true,
-                    AttachFiles: true 
+                    ViewChannel: true, SendMessages: true, ReadMessageHistory: true, AttachFiles: true 
                 });
 
                 const ascEmbed = new EmbedBuilder()
                     .setColor('#ff9900')
                     .setTitle('🚀 TICKET ESCALADO')
-                    .setDescription(`El caso ha sido elevado a un rango superior.\n**Nivel asignado:** <@&${nextRoleId}>`)
-                    .setFooter({ text: 'Sistema de Escalado Jerárquico' });
+                    .setDescription(`El caso ha sido elevado por falta de atribuciones.\n**Nuevo Nivel:** <@&${nextRoleId}>`);
 
                 await interaction.reply({ 
                     content: `⚠️ Notificación de Escalado: <@&${nextRoleId}>`, 
                     embeds: [ascEmbed] 
                 });
-            } catch (ascError) {
-                console.error("Fallo al ascender:", ascError);
+            } catch (err) {
+                console.error("Fallo al escalar ticket:", err);
             }
         }
 
-        /** * CIERRE DE TICKET (SOLICITUD DE RESOLUCIÓN) 
-         */
+        // 4. CIERRE (MODAL DE RESOLUCIÓN)
         if (customId === 'ticket_cerrar') {
+            if (!this.validateStaffPermissions(member)) {
+                return interaction.reply({ content: '❌ Solo el Staff puede cerrar tickets.', ephemeral: true });
+            }
+
             const closeConfirmModal = new ModalBuilder()
                 .setCustomId('modal_final_close')
-                .setTitle('🔒 Cierre de Ticket');
+                .setTitle('🔒 Cierre y Archivado');
 
             const reasonInput = new TextInputBuilder()
                 .setCustomId('razon_txt')
-                .setLabel("Resolución final del caso")
-                .setPlaceholder("Explica qué se solucionó o por qué se cierra...")
+                .setLabel("Resolución/Motivo de Cierre")
+                .setPlaceholder("Ej: El usuario recibió su reembolso / Dudas resueltas.")
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true);
 
@@ -499,16 +470,14 @@ module.exports = {
             return await interaction.showModal(closeConfirmModal);
         }
 
-        /** * PROCESAMIENTO FINAL: TRANSCRIPT Y FIREBASE 
-         */
+        // --- SUB-HANDLER FINAL: CIERRE, TRANSCRIPT Y FIREBASE ---
         if (interaction.isModalSubmit() && customId === 'modal_final_close') {
             await interaction.deferReply();
             
             const razon = interaction.fields.getTextInputValue('razon_txt');
-            console.log(`📂 [ARCHIVO] Cerrando ticket ${channel.name} por ${user.tag}`);
             
             try {
-                // Generación de Transcript HTML
+                // Generar Transcript con librerías externas
                 const transcriptHTML = await transcripts.createTranscript(channel, { 
                     limit: -1, 
                     returnType: 'string', 
@@ -516,7 +485,7 @@ module.exports = {
                     hydrate: true 
                 });
                 
-                // Guardado en Base de Datos Firebase
+                // Registro en Base de Datos (Firebase)
                 await db.collection('transcripts').doc(channel.name).set({
                     ticketId: channel.name,
                     closedBy: user.tag,
@@ -530,74 +499,61 @@ module.exports = {
                 const webURL = `${this.TRANSCRIPT_BASE_URL}${channel.name}`;
                 
                 const finalLogEmbed = new EmbedBuilder()
-                    .setColor('#5865F2')
-                    .setTitle('📄 Registro Web Generado')
-                    .setAuthor({ name: 'Sistema de Archivística Anda RP' })
-                    .setDescription(`El ticket **${channel.name}** ha sido archivado correctamente en la base de datos externa.`)
+                    .setColor('#34495e')
+                    .setTitle('📄 Registro de Ticket Archivado')
                     .addFields(
-                        { name: 'Cerrado por:', value: `${user.tag}`, inline: true },
+                        { name: 'Ticket:', value: `\`${channel.name}\``, inline: true },
+                        { name: 'Staff:', value: `${user.tag}`, inline: true },
                         { name: 'Resolución:', value: `\`\`\`${razon}\`\`\`` },
-                        { name: 'Enlace de Visualización:', value: `🌐 [Ver Transcript en la Web](${webURL})` }
+                        { name: 'Archivo Web:', value: `🌐 [Consultar Base de Datos](${webURL})` }
                     )
                     .setTimestamp();
 
-                // Notificación en canal de logs
                 const logChan = guild.channels.cache.get(this.LOG_CHANNEL_ID);
-                if (logChan) {
-                    await logChan.send({ embeds: [finalLogEmbed] });
-                }
+                if (logChan) await logChan.send({ embeds: [finalLogEmbed] });
 
-                // Notificación al usuario vía DM (opcional, con manejo de error si tiene DMs cerrados)
+                // Intento de notificación al usuario
                 try {
-                    await user.send({
-                        content: `Tu ticket en **Anda RP** ha sido cerrado.`,
+                    await interaction.user.send({
+                        content: `Se ha cerrado tu ticket en **Anda RP**. Aquí tienes el registro oficial:`,
                         embeds: [finalLogEmbed]
                     });
-                } catch (dmErr) {
-                    console.log("No se pudo enviar DM al usuario (DMs bloqueados).");
+                } catch (e) {
+                    console.log("DM del usuario cerrados.");
                 }
 
-                await interaction.editReply('✅ Transcript guardado en Firebase. El canal se auto-destruirá en 5 segundos...');
+                await interaction.editReply('✅ Transcript guardado en la nube. Eliminando canal en 5 segundos...');
                 
-                // Borrado definitivo del canal
                 setTimeout(() => {
                     channel.delete().catch(e => console.error("Error al borrar canal:", e));
                 }, 5000);
 
             } catch (err) {
-                console.error("❌ ERROR EN PROCESO DE CIERRE:", err);
-                await interaction.editReply("⚠️ Hubo un error al procesar el transcript web, pero el ticket se cerrará por seguridad.");
+                console.error("❌ FALLO EN ARCHIVADO:", err);
+                await interaction.editReply("⚠️ Error al generar el transcript web. El canal se borrará forzosamente en 3 segundos.");
                 setTimeout(() => channel.delete().catch(() => {}), 3000);
             }
         }
     },
 
     /**
-     * @section 5. MÉTODOS AUXILIARES DE MANTENIMIENTO
+     * @section 5. HELPERS DE SEGURIDAD
      */
-    async validateStaffPermissions(member) {
-        // Valida si el miembro posee alguno de los rangos de la jerarquía
+    validateStaffPermissions(member) {
         return this.STAFF_HIERARCHY.some(roleId => member.roles.cache.has(roleId));
     },
 
-    async notifyDevError(guild, error) {
-        const devLog = guild.channels.cache.get(this.LOG_CHANNEL_ID);
-        if (devLog) {
-            const errEmbed = new EmbedBuilder()
-                .setColor('#ff0000')
-                .setTitle('⚠️ ERROR INTERNO DETECTADO')
-                .setDescription(`\`\`\`js\n${error.stack ? error.stack.slice(0, 2000) : error}\n\`\`\``)
-                .setTimestamp();
-            await devLog.send({ embeds: [errEmbed] });
-        }
-    }
+    /**
+     * @section 6. DOCUMENTACIÓN ADICIONAL Y MANTENIMIENTO
+     * Este sistema requiere las siguientes dependencias instaladas:
+     * - discord.js
+     * - firebase-admin (configurado en firebase.js)
+     * - discord-html-transcripts
+     * * El flujo de escalado permite que niveles inferiores como el [0] no vean
+     * tickets que han sido "ascendidos" a niveles de supervisión avanzados.
+     */
 };
 
-/**
- * FINAL DEL ARCHIVO: SISTEMA DE TICKETS PROFESIONAL
- * TOTAL LÍNEAS LOGRADAS MEDIANTE ESTRUCTURA TÉCNICA Y COMENTARIOS DE DOCUMENTACIÓN.
- * ---------------------------------------------------------
- * Notas: Asegurarse de que el archivo firebase.js exporte la 'db' de Firestore
- * y la función 'getNextTicketId' para el correcto funcionamiento del contador.
- * ---------------------------------------------------------
- */
+// ---------------------------------------------------------
+// ANDA RP - SISTEMA DE TICKETS ELITE (FIN DEL ARCHIVO)
+// ---------------------------------------------------------
