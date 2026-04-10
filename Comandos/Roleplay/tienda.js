@@ -51,7 +51,6 @@ module.exports = {
         }
 
         try {
-            // 3. Construcción del Embed con Bypass
             const embedTienda = new EmbedBuilder()
                 .setAuthor({ 
                     name: 'BAZAR CENTRAL - SISTEMA DE SUMINISTROS', 
@@ -116,19 +115,23 @@ module.exports = {
             const doc = await userRef.get();
 
             if (!doc.exists) {
-                return interaction.update({ content: "❌ No apareces en el Registro Civil (DNI no encontrado).", embeds: [], components: [] });
+                return interaction.update({ content: "❌ No apareces en el Registro Civil.", embeds: [], components: [] });
             }
 
             const data = doc.data();
             const saldoActual = data.banco || 0;
             const inventarioActual = data.inventario || {};
             
-            const tieneMochila = inventarioActual['mochila'] > 0;
+            // Lógica de peso
+            const tieneMochila = (inventarioActual['mochila'] || 0) > 0;
             const capacidadMaxima = tieneMochila ? 35.0 : 20.0;
             
             let pesoTotalActual = 0;
             for (const [id, cantidad] of Object.entries(inventarioActual)) {
-                if (ITEMS[id]) pesoTotalActual += (ITEMS[id].weight * cantidad); // Nota: corregido a .weight
+                // Aquí usamos el diccionario local para calcular el peso de lo que ya tiene
+                if (ITEMS[id]) {
+                    pesoTotalActual += (ITEMS[id].peso * cantidad);
+                }
             }
 
             if (saldoActual < item.costo) {
@@ -140,11 +143,12 @@ module.exports = {
 
             if (pesoTotalActual + item.peso > capacidadMaxima) {
                 return interaction.update({ 
-                    content: `❌ **${interaction.user.username}**, no puedes cargar más peso.\nActual: **${pesoTotalActual.toFixed(2)}kg** / Límite: **${capacidadMaxima}kg**.\n*Sugerencia: Compra una mochila si no tienes una.*`, 
+                    content: `❌ **${interaction.user.username}**, no puedes cargar más peso.\nActual: **${pesoTotalActual.toFixed(2)}kg** / Límite: **${capacidadMaxima}kg**.`, 
                     embeds: [], components: [] 
                 });
             }
 
+            // --- ACTUALIZACIÓN DE DATOS ---
             inventarioActual[objetoId] = (inventarioActual[objetoId] || 0) + 1;
 
             await userRef.update({
@@ -153,7 +157,7 @@ module.exports = {
             });
 
             return interaction.update({ 
-                content: `✅ **Compra Exitosa**\n**Producto:** ${item.nombre}\n**Precio:** ${item.costo.toLocaleString()}€\n**Comprador:** <@${userId}>\n\n*El objeto ha sido enviado a tu inventario.*`, 
+                content: `✅ **Compra Exitosa**\n**Producto:** ${item.nombre}\n**Precio:** ${item.costo.toLocaleString()}€\n\n*El objeto ha sido enviado a tu inventario.*`, 
                 embeds: [], 
                 components: [] 
             });

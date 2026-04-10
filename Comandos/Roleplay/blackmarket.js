@@ -6,7 +6,7 @@ const {
     AttachmentBuilder 
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
-const fs = require('fs'); // Importamos fs para verificar si existe el archivo (opcional pero recomendado)
+const fs = require('fs');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -29,35 +29,30 @@ module.exports = {
             { label: 'Munición 7.62 (x30)', value: 'muni_762', price: 12000, emoji: '🔥', weight: 1.2, desc: 'Caja de munición para fusiles.' }
         ];
 
-        let logo = null; // Inicializamos logo como null por defecto
-        const files = []; // Array para los archivos adjuntos
+        let logo = null;
+        const files = [];
 
         // --- BYPASS SALVAJE DE IMAGEN ---
         try {
-            // Verificamos si el archivo existe físicamente antes de intentar crear el attachment
             if (fs.existsSync(RUTA_LOGO)) {
                 logo = new AttachmentBuilder(RUTA_LOGO);
-                files.push(logo); // Si existe, lo añadimos al array de archivos
+                files.push(logo);
             } else {
-                console.warn(`⚠️ Advertencia: El archivo de logo no se encontró en ${RUTA_LOGO}. Se procederá sin imagen.`);
+                console.warn(`⚠️ Advertencia: El archivo de logo no se encontró en ${RUTA_LOGO}.`);
             }
         } catch (error) {
-            // Si hay un error al crear el attachment (ej: permisos), lo capturamos
-            console.error("❌ Error al intentar cargar el logo (Bypasseado):", error);
-            logo = null; // Nos aseguramos de que logo sea null si falla
+            console.error("❌ Error al intentar cargar el logo:", error);
+            logo = null;
         }
 
         try {
-            // --- CONSTRUCCIÓN DE INTERFAZ OSCURA ---
             const embedMercado = new EmbedBuilder()
-                // Bypass en Author: Si logo existe, usa attachment, si no, null
                 .setAuthor({ 
                     name: 'RED DE CONTRABANDO - TRÁFICO ILÍCITO', 
                     iconURL: logo ? 'attachment://LogoPFP.png' : null 
                 })
                 .setTitle('💀 SUMINISTROS DE MERCADO NEGRO')
-                .setColor('#1a1a1a') // Color negro puro
-                // Bypass en Thumbnail: Si logo existe, usa attachment, si no, null
+                .setColor('#1a1a1a')
                 .setThumbnail(logo ? 'attachment://LogoPFP.png' : null)
                 .setDescription(
                     'No hagas preguntas, no des nombres. Si el dinero es real, la mercancía también.\n' +
@@ -67,7 +62,6 @@ module.exports = {
                 .addFields({ name: '⚠️ Advertencia', value: 'Portar estos objetos es motivo de arresto inmediato por los Mossos.' })
                 .setFooter({ text: 'Usa la mercancía con discreción.' });
 
-            // --- MENÚ DE SELECCIÓN ---
             const menuClandestino = new StringSelectMenuBuilder()
                 .setCustomId('comprar_blackmarket')
                 .setPlaceholder('Selecciona tu pedido...')
@@ -80,7 +74,6 @@ module.exports = {
 
             const fila = new ActionRowBuilder().addComponents(menuClandestino);
 
-            // Respondemos enviando el array de files (que estará vacío si el logo falló)
             return await interaction.reply({ 
                 embeds: [embedMercado], 
                 components: [fila], 
@@ -89,23 +82,16 @@ module.exports = {
 
         } catch (error) {
             console.error("Error en Blackmarket Execute:", error);
-            // Intentamos responder con un mensaje de error si el reply principal falla
-            if (interaction.replied || interaction.deferred) {
-                return await interaction.followUp({ content: "❌ El contacto ha desaparecido (Error crítico).", ephemeral: true });
-            } else {
-                return await interaction.reply({ content: "❌ El contacto ha desaparecido (Error crítico).", ephemeral: true });
-            }
+            return await interaction.reply({ content: "❌ El contacto ha desaparecido (Error crítico).", ephemeral: true });
         }
     },
 
-    // ... (resto del código handleBlackmarketInteractions permanece igual)
     async handleBlackmarketInteractions(interaction) {
         if (!interaction.isStringSelectMenu() || interaction.customId !== 'comprar_blackmarket') return;
 
         const objetoId = interaction.values[0];
         const userId = interaction.user.id;
 
-        // --- BASE DE DATOS DE ARTÍCULOS ---
         const ITEMS = {
             'glock': { nombre: 'Glock-17', costo: 45000, peso: 1.5, peligro: true },
             'ak47': { nombre: 'AK-47', costo: 180000, peso: 4.3, peligro: true },
@@ -114,7 +100,10 @@ module.exports = {
             'chaleco_pesado': { nombre: 'Chaleco Pesado', costo: 35000, peso: 8.0, peligro: false },
             'inhibidor': { nombre: 'Inhibidor', costo: 55000, peso: 2.0, peligro: true },
             'muni_9mm': { nombre: 'Munición 9mm', costo: 5000, peso: 0.8, peligro: false },
-            'muni_762': { nombre: 'Munición 7.62', costo: 12000, peso: 1.2, peligro: false }
+            'muni_762': { nombre: 'Munición 7.62', costo: 12000, peso: 1.2, peligro: false },
+            // Añadidos los de la tienda para que el cálculo de peso no falle si los tiene
+            'celular': { peso: 0.2 }, 'gps': { peso: 0.1 }, 'radio': { peso: 0.5 }, 'mochila': { peso: 0.0 },
+            'kit_reparacion': { peso: 5.0 }, 'botiquin': { peso: 1.2 }, 'gasolina': { peso: 10.0 }, 'camara': { peso: 1.5 }
         };
 
         const item = ITEMS[objetoId];
@@ -132,11 +121,10 @@ module.exports = {
             const invActual = data.inventario || {};
 
             // --- CÁLCULO DE CAPACIDAD (Peso) ---
-            const tieneMochila = invActual['mochila'] > 0;
+            const tieneMochila = (invActual['mochila'] || 0) > 0;
             const limitePeso = tieneMochila ? 35.0 : 20.0;
             
             let pesoCarga = 0;
-            // Calculamos peso basándonos en los pesos definidos (o 1kg por defecto si no existe)
             for (const [id, cant] of Object.entries(invActual)) {
                 const pesoItem = ITEMS[id] ? ITEMS[id].peso : 1.0;
                 pesoCarga += (pesoItem * cant);
@@ -158,7 +146,7 @@ module.exports = {
                 });
             }
 
-            // --- PROCESAMIENTO DE TRANSACCIÓN ILEGAL ---
+            // --- PROCESAMIENTO DE TRANSACCIÓN ---
             invActual[objetoId] = (invActual[objetoId] || 0) + 1;
 
             await userRef.update({
@@ -166,16 +154,14 @@ module.exports = {
                 inventario: invActual
             });
 
-            // 3. Sistema de "Chivatazo" (Random 10% si el objeto es peligroso)
+            // 3. Sistema de "Chivatazo"
             let alertaTexto = "";
             if (item.peligro && Math.random() < 0.10) {
                 alertaTexto = "\n*⚠️ Notas un movimiento extraño en las sombras... alguien podría haberte visto.*";
-                // Aquí podrías enviar un mensaje a un canal de policía oculto
                 const canalLogsPolicia = interaction.guild.channels.cache.get('TU_ID_CANAL_AVISOS_PD');
                 if (canalLogsPolicia) canalLogsPolicia.send(`🚨 **AVISO ANÓNIMO:** Se informa de una transacción de armas en la zona.`);
             }
 
-            // Respuesta confirmando la compra
             return interaction.update({ 
                 content: `💀 **Negocio Cerrado.**\nHas recogido tu **${item.nombre}**.\n\n*Recibo destruido. Se han descontado ${item.costo.toLocaleString()}€ de tu cuenta.*${alertaTexto}`, 
                 embeds: [], 
@@ -184,7 +170,7 @@ module.exports = {
 
         } catch (error) {
             console.error("Error en Blackmarket Interaction:", error);
-            return interaction.update({ content: "❌ La red de contrabando se ha caído. Inténtalo más tarde.", embeds: [], components: [] });
+            return interaction.update({ content: "❌ La red de contrabando se ha caído.", embeds: [], components: [] });
         }
     }
 };
