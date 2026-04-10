@@ -253,6 +253,11 @@ module.exports = {
                     );
                 }
                 
+                if (type !== 'reporte') {
+                    staffActions.addComponents(
+                        new ButtonBuilder().setCustomId('ticket_ascender').setLabel('Ascender').setEmoji('🚀').setStyle(ButtonStyle.Primary),
+                    );
+                }
                 staffActions.addComponents(new ButtonBuilder().setCustomId('ticket_cerrar').setLabel('Cerrar').setEmoji('🔒').setStyle(ButtonStyle.Danger));
 
                 // Mensaje Inicial con PING al rol de notificaciones solicitado
