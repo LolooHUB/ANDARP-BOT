@@ -1,15 +1,14 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 const axios = require('axios');
 const FormData = require('form-data');
 
-// Función para subir a ImgBB mediante API (Reemplazando Imgur)
+// Función para subir a ImgBB mediante API
 async function uploadToImgBB(attachment) {
     try {
         const formData = new FormData();
         formData.append('image', attachment.url);
         
-        // Usamos el secret APIKEY_IMGBB
         const apiKey = process.env.APIKEY_IMGBB; 
         
         const response = await axios.post(`https://api.imgbb.com/1/upload?key=${apiKey}`, formData, {
@@ -20,7 +19,7 @@ async function uploadToImgBB(attachment) {
         return response.data.data.url; 
     } catch (error) {
         console.error('Error al subir a ImgBB:', error.response ? error.response.data : error.message);
-        return attachment.url; // Fallback al link de Discord si falla
+        return attachment.url; 
     }
 }
 
@@ -30,10 +29,27 @@ module.exports = {
         .setDescription('🚫 Banea a un usuario y lo añade a la Blacklist.')
         .addUserOption(opt => opt.setName('usuario').setDescription('Usuario a banear').setRequired(true))
         .addStringOption(opt => opt.setName('motivo').setDescription('Motivo del baneo').setRequired(true))
-        .addAttachmentOption(opt => opt.setName('evidencia').setDescription('Prueba visual del ban').setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+        .addAttachmentOption(opt => opt.setName('evidencia').setDescription('Prueba visual del ban').setRequired(true)),
 
     async execute(interaction) {
+        // --- 🛡️ CONTROL DE ACCESO (HIGH STAFF ONLY) ---
+        const staffHierarchy = [
+            '1476768019496829033', // [6] Supervision Avanzada
+            '1476768122915782676', // [7] Manager
+            '1476768405037125885', // [8] Community Manager
+            '1476768951034970253'  // [9] Fundacion
+        ];
+
+        const tienePermiso = interaction.member.roles.cache.some(role => staffHierarchy.includes(role.id));
+
+        if (!tienePermiso) {
+            return interaction.reply({ 
+                content: '❌ No tienes rango suficiente para aplicar baneos permanentes (Mínimo: Supervisión Avanzada).', 
+                ephemeral: true 
+            });
+        }
+        // ----------------------------------------------
+
         const user = interaction.options.getUser('usuario');
         const member = interaction.options.getMember('usuario');
         const motivo = interaction.options.getString('motivo');
@@ -42,9 +58,9 @@ module.exports = {
         const canalSancionesId = '1477387624288354324';
         const canalBlacklistId = '1476760068199415888';
 
-        // Verificación de jerarquía
+        // Verificación de jerarquía de Discord (Bot vs Usuario)
         if (member && !member.bannable) {
-            return interaction.reply({ content: "❌ No puedo banear a este usuario (Rango superior).", ephemeral: true });
+            return interaction.reply({ content: "❌ No puedo banear a este usuario (Rango superior al mío).", ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
@@ -58,21 +74,21 @@ module.exports = {
             usuarioId: user.id,
             usuarioTag: user.tag,
             moderadorId: interaction.user.id,
+            moderadorTag: interaction.user.tag,
             motivo: motivo,
             evidencia: imgbbLink,
             fecha: fechaBan,
             tipo: 'BAN_PERMANENTE'
         };
 
-        // Guardamos en la colección de Blacklist para persistencia total
         await db.collection('blacklist').doc(user.id).set(banData);
         await db.collection('sanciones_bans').add(banData);
 
         // 3. Crear Embed de Sanción
         const embedBan = new EmbedBuilder()
-            .setColor('#ff0000') // Rojo para Bans
+            .setColor('#ff0000') 
             .setTitle(`🚫 Usuario Baneado - ${user.username}`)
-            .setDescription(`**MODERADOR :** <@${interaction.user.id}>\n\n**MOTIVO :** ${motivo}`)
+            .setDescription(`**USUARIO :** <@${user.id}>\n**MODERADOR :** <@${interaction.user.id}>\n\n**MOTIVO :** ${motivo}`)
             .setAuthor({ name: 'Sistema de Sanciones', iconURL: 'attachment://LogoPFP.png' })
             .setFooter({ text: 'Anda RP - Rol de calidad', iconURL: 'attachment://LogoPFP.png' })
             .setTimestamp();

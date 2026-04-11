@@ -35,6 +35,25 @@ const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Automa
 const { db } = require('./Comandos/Automatizaciones/firebase');
 
 // --- 📂 CARGA DE COMANDOS Y SISTEMAS ---
+
+const eventsPath = path.join(__dirname, 'seguridad'); // Ruta a tu carpeta de seguridad
+if (fs.existsSync(eventsPath)) {
+    const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+
+    for (const file of eventFiles) {
+        const filePath = path.join(eventsPath, file);
+        const event = require(filePath);
+        
+        // Registrar eventos automáticos (Anti-Alt, Anti-Raid, etc)
+        if (event.once) {
+            client.once(event.name, (...args) => event.execute(...args, client));
+        } else {
+            // Algunos de nuestros archivos exportan una función 'execute' directamente
+            client.on(event.name, (...args) => event.execute(...args, client));
+        }
+    }
+}
+
 const loadCommands = (dir) => {
     const files = fs.readdirSync(dir);
     for (const file of files) {
@@ -243,5 +262,150 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // 🛡️ MANEJO DE ERRORES GLOBALES (Previene caídas por ataques o bugs)
 process.on('unhandledRejection', error => console.error('Unhandled promise rejection:', error));
 process.on('uncaughtException', error => console.error('Uncaught exception:', error));
+
+
+// ANTI ALTS
+client.on(Events.InteractionCreate, async interaction => {
+    if (interaction.isButton()) {
+        const [action, targetId] = interaction.customId.split('_');
+        
+        if (action === 'kick') {
+            const modal = new ModalBuilder()
+                .setCustomId(`modal_kick_${targetId}`)
+                .setTitle('Expulsar Usuario');
+
+            const motivoInput = new TextInputBuilder()
+                .setCustomId('kick_reason')
+                .setLabel('Motivo de la expulsión')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Ej: Cuenta alt sospechosa / Menos de 24h')
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(motivoInput));
+            await interaction.showModal(modal);
+        }
+
+        if (action === 'info') {
+            const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+            const userSnap = await db.collection('sanciones_warns').where('usuarioId', '==', targetId).get();
+            
+            const infoEmbed = new EmbedBuilder()
+                .setTitle(`Detalles: ${targetId}`)
+                .setColor('#e1ff00')
+                .setDescription(`Historial completo de warns: **${userSnap.size}**\nEstado en servidor: ${targetMember ? 'Dentro' : 'Fuera'}`);
+
+            const rowInfo = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`kick_${targetId}`)
+                    .setLabel('Expulsar')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('ignore_alert')
+                    .setLabel('Ignorar')
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
+            await interaction.reply({ embeds: [infoEmbed], components: [rowInfo], ephemeral: true });
+        }
+
+        if (interaction.customId === 'ignore_alert') {
+            await interaction.update({ content: '✅ Alerta ignorada.', embeds: [], components: [] });
+        }
+    }
+
+    if (interaction.isModalSubmit()) {
+        if (interaction.customId.startsWith('modal_kick_')) {
+            const targetId = interaction.customId.split('_')[2];
+            const motivo = interaction.fields.getTextInputValue('kick_reason');
+            const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+
+            if (member) {
+                await member.kick(motivo);
+                await interaction.reply({ content: `✅ <@${targetId}> ha sido expulsado por: ${motivo}`, ephemeral: true });
+            } else {
+                await interaction.reply({ content: '❌ El usuario ya no está en el servidor.', ephemeral: true });
+            }
+        }
+    }
+});
+
+client.on(Events.InteractionCreate, async interaction => {
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_cuarentena_')) {
+        const userId = interaction.user.id;
+        const motivo = interaction.fields.getTextInputValue('motivo_ingreso');
+        const explicacion = interaction.fields.getTextInputValue('explicacion');
+        
+        const canalSecurityId = '1492339602420273241';
+        const canalSecurity = interaction.guild.channels.cache.get(canalSecurityId);
+
+        // Crear Embed para el Staff
+        const embedStaff = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle('📑 Apelación de Cuarentena')
+            .setThumbnail(interaction.user.displayAvatarURL())
+            .addFields(
+                { name: '👤 Usuario', value: `<@${userId}> (\`${userId}\`)`, inline: true },
+                { name: '❓ Motivo percibido', value: motivo },
+                { name: '📝 Explicación del Staff', value: explicacion }
+            )
+            .setFooter({ text: 'Revisar logs y evidencia del bot antes de decidir.' })
+            .setTimestamp();
+
+        const rowDecisiva = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`aceptar_cuarentena_${userId}`)
+                .setLabel('Devolver Rangos')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`rechazar_cuarentena_${userId}`)
+                .setLabel('Expulsar y Blacklist')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        if (canalSecurity) {
+            await canalSecurity.send({ 
+                content: `⚠️ <@&1476768951034970253> Nueva apelación recibida.`, 
+                embeds: [embedStaff],
+                components: [rowDecisiva]
+            });
+        }
+
+        await interaction.reply({ 
+            content: '✅ Tu formulario ha sido enviado al canal de seguridad. Espera una resolución.', 
+            ephemeral: true 
+        });
+    }
+
+    // --- LÓGICA DE BOTONES PARA EL AGENTE DE SEGURIDAD ---
+    if (interaction.isButton()) {
+        const [accion, , targetId] = interaction.customId.split('_');
+        if (accion !== 'aceptar' && accion !== 'rechazar') return;
+
+        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+        const rolCuarentenaId = '1492342183813189783';
+
+        if (accion === 'aceptar') {
+            if (targetMember) {
+                await targetMember.roles.remove(rolCuarentenaId);
+                // Aquí podrías añadir un sistema para devolverle sus roles originales si los guardaste en DB
+                await interaction.reply({ content: `✅ Se ha retirado la cuarentena a <@${targetId}>.`, ephemeral: true });
+            }
+        }
+
+        if (accion === 'rechazar') {
+            if (targetMember) {
+                await targetMember.ban({ reason: 'Apelación de cuarentena rechazada / Blacklist automática' });
+                // Registrar en Blacklist de Firebase
+                await db.collection('blacklist').doc(targetId).set({
+                    usuarioId: targetId,
+                    motivo: 'Falla en apelación de cuarentena (Seguridad)',
+                    fecha: new Date().toISOString()
+                });
+                await interaction.reply({ content: `🚫 <@${targetId}> ha sido baneado y puesto en Blacklist.`, ephemeral: true });
+            }
+        }
+    }
+});
+
 
 client.login(process.env.DISCORD_TOKEN);

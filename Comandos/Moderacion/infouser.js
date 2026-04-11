@@ -11,6 +11,30 @@ module.exports = {
                 .setRequired(true)),
 
     async execute(interaction) {
+        // --- 🛡️ CONTROL DE ACCESO (STAFF HIERARCHY) ---
+        const staffHierarchy = [
+            '1476765837825277992', // [0] Helper
+            '1476766248242118697', // [1] Mod en pruebas
+            '1476766796861149284', // [2] Mod
+            '1476767536530849822', // [3] Supervision basica
+            '1476767750625038336', // [4] Administrador
+            '1482153188856434828', // [5] Compras
+            '1476768019496829033', // [6] Supervision Avanzada
+            '1476768122915782676', // [7] Manager
+            '1476768405037125885', // [8] Community Manager
+            '1476768951034970253'  // [9] Fundacion
+        ];
+
+        const tienePermiso = interaction.member.roles.cache.some(role => staffHierarchy.includes(role.id));
+
+        if (!tienePermiso) {
+            return interaction.reply({ 
+                content: '❌ No tienes permiso para consultar información privada de usuarios.', 
+                ephemeral: true 
+            });
+        }
+        // ----------------------------------------------
+
         const user = interaction.options.getUser('usuario');
         const member = interaction.options.getMember('usuario');
         const rolVerificadoId = '1476791384894865419';
@@ -18,10 +42,12 @@ module.exports = {
         await interaction.deferReply({ ephemeral: false });
 
         // 1. Consultas en Firebase (Persistencia)
-        const warnsSnap = await db.collection('sanciones_warns').where('usuarioId', '==', user.id).get();
-        const kicksSnap = await db.collection('sanciones_kicks').where('usuarioId', '==', user.id).get();
-        const bansSnap = await db.collection('sanciones_bans').where('usuarioId', '==', user.id).get();
-        const blacklistDoc = await db.collection('blacklist').doc(user.id).get();
+        const [warnsSnap, kicksSnap, bansSnap, blacklistDoc] = await Promise.all([
+            db.collection('sanciones_warns').where('usuarioId', '==', user.id).get(),
+            db.collection('sanciones_kicks').where('usuarioId', '==', user.id).get(),
+            db.collection('sanciones_bans').where('usuarioId', '==', user.id).get(),
+            db.collection('blacklist').doc(user.id).get()
+        ]);
 
         const totalWarns = warnsSnap.size;
         const totalKicks = kicksSnap.size;
@@ -35,7 +61,7 @@ module.exports = {
 
         // 3. Construcción del Embed
         const embedInfo = new EmbedBuilder()
-            .setColor('#e1ff00') // Amarillo Anda RP
+            .setColor('#e1ff00') 
             .setTitle(`👤 Información de Usuario: ${user.username}`)
             .setThumbnail(user.displayAvatarURL({ dynamic: true }))
             .setAuthor({ name: 'Anda RP - Sistema de Datos', iconURL: 'attachment://LogoPFP.png' })

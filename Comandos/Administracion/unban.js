@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 
 module.exports = {
@@ -12,10 +12,27 @@ module.exports = {
         .addStringOption(opt => 
             opt.setName('motivo')
                 .setDescription('Motivo de la revocación')
-                .setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+                .setRequired(true)),
 
     async execute(interaction) {
+        // --- 🛡️ CONTROL DE ACCESO RESTRINGIDO (HIGH STAFF ONLY) ---
+        const staffHierarchy = [
+            '1476768019496829033', // [6] Supervision Avanzada
+            '1476768122915782676', // [7] Manager
+            '1476768405037125885', // [8] Community Manager
+            '1476768951034970253'  // [9] Fundacion
+        ];
+
+        const tienePermiso = interaction.member.roles.cache.some(role => staffHierarchy.includes(role.id));
+
+        if (!tienePermiso) {
+            return interaction.reply({ 
+                content: '❌ No tienes rango suficiente para revocar sanciones globales (Mínimo: Supervisión Avanzada).', 
+                ephemeral: true 
+            });
+        }
+        // ---------------------------------------------------------
+
         const userId = interaction.options.getString('id');
         const motivo = interaction.options.getString('motivo');
         const canalBlacklistId = '1476760068199415888';
@@ -27,21 +44,23 @@ module.exports = {
             // 1. Intentar desbanear en Discord
             await interaction.guild.members.unban(userId, motivo);
 
-            // 2. Limpiar registro de Blacklist en Firebase (Persistencia)
+            // 2. Limpiar registro de Blacklist en Firebase
             const blacklistRef = db.collection('blacklist').doc(userId);
             const doc = await blacklistRef.get();
-            if (doc.exists) { await blacklistRef.delete(); }
+            if (doc.exists) { 
+                await blacklistRef.delete(); 
+            }
 
-            // 3. Crear Embed de Revocación (Blacklist)
+            // 3. Crear Embed de Revocación
             const embedUnban = new EmbedBuilder()
-                .setColor('#00ff00') // Verde
+                .setColor('#00ff00') 
                 .setTitle(`🔓 Sanción Revocada - ID: ${userId}`)
                 .setDescription(`**MODERADOR :** <@${interaction.user.id}>\n\n**MOTIVO :** ${motivo}`)
                 .setAuthor({ name: 'Sistema de Sanciones', iconURL: 'attachment://LogoPFP.png' })
                 .setFooter({ text: 'Anda RP - Rol de calidad', iconURL: 'attachment://LogoPFP.png' })
                 .setTimestamp();
 
-            // 4. Enviar a Canales (Blacklist y Logs)
+            // 4. Enviar a Canales
             const canalBlacklist = interaction.guild.channels.cache.get(canalBlacklistId);
             const canalLogs = interaction.guild.channels.cache.get(logBotId);
 
@@ -61,7 +80,7 @@ module.exports = {
 
         } catch (error) {
             console.error(error);
-            if (error.code === 10007 || error.code === 50035) {
+            if (error.code === 10007 || error.code === 50035 || error.code === 10013) {
                 return interaction.editReply({ content: "❌ No se pudo encontrar un baneo activo para esa ID o la ID es inválida." });
             }
             await interaction.editReply({ content: "❌ Hubo un error al procesar el desbaneo." });
