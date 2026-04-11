@@ -9,7 +9,8 @@ const {
     TextInputStyle,
     Events
 } = require('discord.js');
-const { db } = require('../Comandos/Automatizaciones/firebase.js');
+const path = require('path');
+const { db } = require(path.join(process.cwd(), 'Comandos', 'Automatizaciones', 'firebase.js'));
 
 module.exports = {
     data: new SlashCommandBuilder()

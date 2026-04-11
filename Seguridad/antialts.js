@@ -8,7 +8,8 @@ const {
     TextInputBuilder, 
     TextInputStyle 
 } = require('discord.js');
-const { db } = require('../../Automatizaciones/firebase');
+const path = require('path');
+const { db } = require(path.join(process.cwd(), 'Comandos', 'Automatizaciones', 'firebase.js'));
 
 module.exports = {
     name: Events.GuildMemberAdd,
