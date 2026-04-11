@@ -1,6 +1,6 @@
 const { 
     Client, GatewayIntentBits, ActivityType, Collection, 
-    EmbedBuilder, AttachmentBuilder 
+    EmbedBuilder, AttachmentBuilder, Events, ModalBuilder, TextInputBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextInputStyle
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
