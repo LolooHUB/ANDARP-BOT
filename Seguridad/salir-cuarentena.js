@@ -9,7 +9,7 @@ const {
     TextInputStyle,
     Events
 } = require('discord.js');
-const { db } = require('../Automatizaciones/firebase');
+const { db } = require('../Comandos/Automatizaciones/firebase.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -54,3 +54,4 @@ module.exports = {
     }
 };
 
+// --- Hola
