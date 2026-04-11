@@ -9,32 +9,26 @@ const {
 const ms = require('ms');
 const { db } = require('../Comandos/Automatizaciones/firebase');
 
-/**
- * SISTEMA DE DESPACHOS PROFESIONAL - ANDA RP
- */
-
 module.exports = {
     name: 'despacho',
     description: 'Gestiona los roles de despacho con persistencia y sistema de sala de espera.',
 
-    // --- 📂 CONFIGURACIÓN DE DESPACHOS (IDs CORREGIDOS) ---
     config: {
         '824811313989419018': { // Lolo_
             role: '1490394005094006876', 
             voice: '1491829800451444746', 
-            canalTexto: '1490391456123326484', // ID Corregido
+            canalTexto: '1490391456123326484', 
             nombre: 'Despacho de Lolo_' 
         },
         '1315779036076707902': { // Francisco Javier
             role: '1490394004569722890', 
             voice: '1491829800451444747',
-            canalTexto: '1490391365266313317', // ID Corregido
+            canalTexto: '1490391365266313317', 
             nombre: 'Despacho de Francisco Javier' 
         },
         '1324001245735686146': { // Anas
             role: '1490394004569722890', 
-            voice: '1491829800451444747',
-            canalTexto: '1491839298356379668', // ID Corregido
+            voice: '1491839298356379668', 
             nombre: 'Despacho de Anas' 
         }
     },
@@ -48,7 +42,6 @@ module.exports = {
 
         const configEjecutor = this.config[message.author.id];
         if (!configEjecutor) return message.reply('❌ No estás autorizado.');
-
         if (!targetMember) return message.reply(`📖 Uso: \`!despacho @user [tiempo]\` o \`!cdespacho @user\``);
 
         if (commandName === 'cdespacho') {
@@ -66,11 +59,9 @@ module.exports = {
     async handleWaitingRoom(oldState, newState) {
         if (newState.channelId !== this.salaEsperaId) return;
         const member = newState.member;
-        if (member.user.bot) return;
+        if (!member || member.user.bot) return;
 
         const channel = newState.channel;
-        if (!channel) return;
-
         const welcomeEmbed = new EmbedBuilder()
             .setColor('#f1c40f')
             .setTitle('🏢 Centro de Visitas - Anda RP')
@@ -80,22 +71,14 @@ module.exports = {
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_despacho_espera')
             .setPlaceholder('🚪 Elige un despacho...')
-            .addOptions(
-                Object.entries(this.config).map(([id, data]) => ({
-                    label: data.nombre,
-                    value: id,
-                    emoji: '📂'
-                }))
-            );
+            .addOptions(Object.entries(this.config).map(([id, data]) => ({
+                label: data.nombre,
+                value: id,
+                emoji: '📂'
+            })));
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
-
-        const msgPregunta = await channel.send({ 
-            content: `${member}`, 
-            embeds: [welcomeEmbed], 
-            components: [row] 
-        }).catch(console.error);
-
+        const msgPregunta = await channel.send({ content: `${member}`, embeds: [welcomeEmbed], components: [row] }).catch(() => null);
         if (!msgPregunta) return;
 
         const collector = msgPregunta.createMessageComponentCollector({ 
@@ -110,9 +93,7 @@ module.exports = {
             const dataDespacho = this.config[eleccionId];
             const canalDueño = i.guild.channels.cache.get(dataDespacho.canalTexto);
 
-            if (!canalDueño) {
-                return i.reply({ content: `❌ Error: No encontré el canal de texto ${dataDespacho.canalTexto}. Revisa los permisos del bot.`, ephemeral: true });
-            }
+            if (!canalDueño) return i.reply({ content: `❌ Error de configuración en el canal de destino.`, ephemeral: true });
 
             const rowAcceso = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`apr_desp_${member.id}_${eleccionId}`).setLabel('Permitir Entrada').setStyle(ButtonStyle.Success),
@@ -126,29 +107,35 @@ module.exports = {
                     .setDescription(`${member} está esperando en la sala.\n\n¿Deseas permitirle la entrada?`)
                     .setColor('#e1ff00')], 
                 components: [rowAcceso] 
-            }).catch(e => console.error("Error enviando al canal del dueño:", e));
+            }).catch(() => null);
 
-            await i.update({ content: `⏳ Solicitud enviada a **${dataDespacho.nombre}**. Por favor, espera en el canal.`, embeds: [], components: [] });
+            await i.update({ content: `⏳ Solicitud enviada. Espera en el canal...`, embeds: [], components: [] });
         });
     },
 
     async handleButtons(interaction) {
         const [accion, , userId, ownerId] = interaction.customId.split('_');
-        
         if (accion === 'den') return interaction.update({ content: '❌ Solicitud denegada.', components: [] });
 
         if (accion === 'apr') {
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             const dataDespacho = this.config[ownerId];
 
-            if (!member) return interaction.update({ content: '❌ El usuario ya no se encuentra en el servidor.', components: [] });
+            if (!member) return interaction.update({ content: '❌ El usuario ya no está en el servidor.', components: [] });
 
             await this.asignarDespacho(interaction.guild, member, ownerId, '1h');
             
+            // --- LÓGICA DE MOVIMIENTO CORREGIDA ---
             if (member.voice.channel) {
-                await member.voice.setChannel(dataDespacho.voice).catch(err => {
-                    interaction.channel.send(`⚠️ No pude mover a ${member} (Faltan permisos o no está en voz).`);
-                });
+                const botMember = interaction.guild.members.me;
+                const targetChannel = interaction.guild.channels.cache.get(dataDespacho.voice);
+                
+                // Verificación de permisos y jerarquía
+                if (targetChannel && botMember.permissions.has('MoveMembers') && botMember.roles.highest.position > member.roles.highest.position) {
+                    await member.voice.setChannel(targetChannel).catch(e => console.error("Error al mover:", e));
+                } else {
+                    await interaction.channel.send(`⚠️ No tengo permisos suficientes o mi rol es inferior al de ${member.user.username} para moverlo.`);
+                }
             }
 
             await interaction.update({ content: `✅ Acceso concedido a ${member.user.tag}.`, components: [] });
@@ -171,17 +158,17 @@ module.exports = {
             });
 
             setTimeout(() => this.finalizarDespacho(guild, targetMember.id, config.role), tiempoMs);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error asignando despacho:", e); }
     },
 
     async finalizarDespacho(guild, userId, roleId) {
         try {
             const member = await guild.members.fetch(userId).catch(() => null);
             if (member) {
-                if (member.roles.cache.has(roleId)) await member.roles.remove(roleId);
-                if (member.voice.channel) await member.voice.setChannel(null); 
+                if (member.roles.cache.has(roleId)) await member.roles.remove(roleId).catch(() => null);
+                if (member.voice.channel) await member.voice.setChannel(null).catch(() => null); 
             }
             await db.collection('despachos_activos').doc(userId).delete().catch(() => {});
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error finalizando despacho:", e); }
     }
 };
