@@ -36,7 +36,7 @@ const { db } = require('./Comandos/Automatizaciones/firebase');
 
 // --- 📂 CARGA DE COMANDOS Y SISTEMAS ---
 
-const eventsPath = path.join(__dirname, 'seguridad'); // Ruta a tu carpeta de seguridad
+const eventsPath = path.join(__dirname, 'Seguridad'); // Ruta a tu carpeta de seguridad
 if (fs.existsSync(eventsPath)) {
     const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
