@@ -68,7 +68,7 @@ loadPrefixInteractions();
 client.once('ready', async (c) => {
     console.log(`✅ Anda RP Online: ${c.user.tag}`);
     client.user.setPresence({ 
-        activities: [{ name: '🔥 Anda RP | Anti-DDoS Active', type: ActivityType.Watching }], 
+        activities: [{ name: '🔥 Anda RP | Rol de Calidad', type: ActivityType.Watching }], 
         status: 'online' 
     });
 
