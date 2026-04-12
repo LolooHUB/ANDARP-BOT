@@ -23,9 +23,9 @@ const CANAL_REPORTES_ID = '1476788899186737172';
 const USER_A_MENCIONAR_ID = '824811313989419018';
 const CANAL_TICKETS_ID = '1476763743424610305';
 
-// 🛑 SISTEMA ANTI-DDOS / RATE LIMIT (Cooldowns)
+// 🛑 SISTEMA ANTI-DDOS / RATE LIMIT
 const cooldowns = new Map();
-const COOLDOWN_SECONDS = 3; // Tiempo entre comandos por usuario
+const COOLDOWN_SECONDS = 3;
 
 client.commands = new Collection();
 client.prefixInteractions = new Collection(); 
@@ -35,20 +35,14 @@ const { handleTicketInteractions, sendTicketPanel } = require('./Comandos/Automa
 const { db } = require('./Comandos/Automatizaciones/firebase');
 
 // --- 📂 CARGA DE COMANDOS Y SISTEMAS ---
-
-const eventsPath = path.join(__dirname, 'Seguridad'); // Ruta a tu carpeta de seguridad
+const eventsPath = path.join(__dirname, 'Seguridad');
 if (fs.existsSync(eventsPath)) {
     const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-
     for (const file of eventFiles) {
-        const filePath = path.join(eventsPath, file);
-        const event = require(filePath);
-        
-        // Registrar eventos automáticos (Anti-Alt, Anti-Raid, etc)
+        const event = require(path.join(eventsPath, file));
         if (event.once) {
             client.once(event.name, (...args) => event.execute(...args, client));
         } else {
-            // Algunos de nuestros archivos exportan una función 'execute' directamente
             client.on(event.name, (...args) => event.execute(...args, client));
         }
     }
@@ -91,7 +85,7 @@ client.once('ready', async (c) => {
         status: 'online' 
     });
 
-    // A. Persistencia de Despachos (Firebase)
+    // A. Persistencia de Despachos
     const despachoCmd = client.prefixInteractions.get('despacho');
     setInterval(async () => {
         const ahora = Date.now();
@@ -142,17 +136,15 @@ client.on('guildCreate', async (guild) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // Lógica Anti-Spam / DDoS para mensajes de prefijo
     const userId = message.author.id;
     if (message.content.startsWith('!')) {
         if (cooldowns.has(userId)) {
             const lastTime = cooldowns.get(userId);
-            if (Date.now() - lastTime < COOLDOWN_SECONDS * 1000) return; // Ignorar si es muy rápido
+            if (Date.now() - lastTime < COOLDOWN_SECONDS * 1000) return;
         }
         cooldowns.set(userId, Date.now());
     }
 
-    // Handler para !ayuda y !mod
     const msgHandler = client.prefixInteractions.get('mensajes');
     if (msgHandler?.handlePrefixCommands) await msgHandler.handlePrefixCommands(message);
 
@@ -161,7 +153,6 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    // Dinero-Give
     if (commandName === 'dinero-give') {
         const cmdBanco = client.commands.get('banco');
         if (cmdBanco?.handleAdminGive) return await cmdBanco.handleAdminGive(message);
@@ -171,70 +162,149 @@ client.on('messageCreate', async (message) => {
     if (interaccion?.execute) await interaccion.execute(message, args, client).catch(console.error);
 });
 
-// --- ⚡ INTERACCIONES (SLASH, BOTONES, MODALES) ---
+// --- ⚡ INTERACCIONES (MOTOR PRINCIPAL) ---
 client.on('interactionCreate', async (interaction) => {
-    // 🛑 ANTI-DDOS: Cooldown para interacciones
     const userId = interaction.user.id;
+    
+    // Anti-Spam de botones/modales
     if (cooldowns.has(userId)) {
         const lastTime = cooldowns.get(userId);
-        if (Date.now() - lastTime < 500) return; // Evita clics repetidos (0.5s)
+        if (Date.now() - lastTime < 500) return;
     }
     cooldowns.set(userId, Date.now());
 
-    // 1. Slash Commands
+    // 1. Comandos de Barra (Slash)
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (command) await command.execute(interaction).catch(console.error);
         return;
     }
 
-    const { customId } = interaction;
+    const customId = interaction.customId;
     if (!customId) return;
 
     try {
-        // A. Tickets
-        if (customId.includes('ticket') || customId.startsWith('t_') || customId.startsWith('modal_t_') || customId.includes('close')) {
+        // --- A. GESTIÓN DE MODALES ---
+        if (interaction.isModalSubmit()) {
+            // Sistemas de Identidad
+            if (customId === 'modal_crear_dni') return await client.commands.get('dni')?.handleDNIInteractions(interaction);
+            if (customId === 'modal_solicitar_licencia') return await client.commands.get('licencia')?.handleLicenciaInteractions(interaction);
+            
+            // Cuarentena / Seguridad
+            if (customId.startsWith('modal_cuarentena_')) {
+                const motivo = interaction.fields.getTextInputValue('motivo_ingreso');
+                const explicacion = interaction.fields.getTextInputValue('explicacion');
+                const canalSecurityId = '1492339602420273241';
+                const canalSecurity = interaction.guild.channels.cache.get(canalSecurityId);
+
+                const embedStaff = new EmbedBuilder()
+                    .setColor('#0099ff')
+                    .setTitle('📑 Apelación de Cuarentena')
+                    .setThumbnail(interaction.user.displayAvatarURL())
+                    .addFields(
+                        { name: '👤 Usuario', value: `<@${userId}> (\`${userId}\`)`, inline: true },
+                        { name: '❓ Motivo percibido', value: motivo },
+                        { name: '📝 Explicación del Staff', value: explicacion }
+                    ).setTimestamp();
+
+                const rowDecisiva = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`aceptar_cuarentena_${userId}`).setLabel('Devolver Rangos').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`rechazar_cuarentena_${userId}`).setLabel('Expulsar y Blacklist').setStyle(ButtonStyle.Danger)
+                );
+
+                if (canalSecurity) await canalSecurity.send({ content: `⚠️ <@&1476768951034970253> Nueva apelación.`, embeds: [embedStaff], components: [rowDecisiva] });
+                return await interaction.reply({ content: '✅ Formulario enviado.', ephemeral: true });
+            }
+
+            // Kick por Anti-Alt
+            if (customId.startsWith('modal_kick_')) {
+                const targetId = customId.split('_')[2];
+                const motivo = interaction.fields.getTextInputValue('kick_reason');
+                const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+                if (member) {
+                    await member.kick(motivo);
+                    return await interaction.reply({ content: `✅ <@${targetId}> expulsado.`, ephemeral: true });
+                }
+            }
+        }
+
+        // --- B. GESTIÓN DE BOTONES ---
+        if (interaction.isButton()) {
+            // Licencias (Aprobar/Denegar)
+            if (customId.startsWith('aprobar_lic_') || customId.startsWith('denegar_lic_')) {
+                return await client.commands.get('licencia')?.handleButtons(interaction);
+            }
+
+            // Seguridad: Cuarentena
+            if (customId.startsWith('aceptar_cuarentena_') || customId.startsWith('rechazar_cuarentena_')) {
+                const [accion, , targetId] = customId.split('_');
+                const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+                const rolCuarentenaId = '1492342183813189783';
+
+                if (accion === 'aceptar' && targetMember) {
+                    await targetMember.roles.remove(rolCuarentenaId);
+                    return await interaction.reply({ content: `✅ Cuarentena retirada a <@${targetId}>.`, ephemeral: true });
+                }
+                if (accion === 'rechazar' && targetMember) {
+                    await targetMember.ban({ reason: 'Apelación rechazada' });
+                    await db.collection('blacklist').doc(targetId).set({ usuarioId: targetId, motivo: 'Falla en apelación', fecha: new Date().toISOString() });
+                    return await interaction.reply({ content: `🚫 <@${targetId}> baneado y en Blacklist.`, ephemeral: true });
+                }
+            }
+
+            // Anti-Alt Info & Kick
+            if (customId.startsWith('kick_')) {
+                const targetId = customId.split('_')[1];
+                const modal = new ModalBuilder().setCustomId(`modal_kick_${targetId}`).setTitle('Expulsar Usuario');
+                const input = new TextInputBuilder().setCustomId('kick_reason').setLabel('Motivo').setStyle(TextInputStyle.Paragraph).setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(input));
+                return await interaction.showModal(modal);
+            }
+
+            if (customId.startsWith('info_')) {
+                const targetId = customId.split('_')[1];
+                const userSnap = await db.collection('sanciones_warns').where('usuarioId', '==', targetId).get();
+                const infoEmbed = new EmbedBuilder().setTitle(`Detalles: ${targetId}`).setColor('#e1ff00').setDescription(`Historial de warns: **${userSnap.size}**`);
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`kick_${targetId}`).setLabel('Expulsar').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('ignore_alert').setLabel('Ignorar').setStyle(ButtonStyle.Secondary)
+                );
+                return await interaction.reply({ embeds: [infoEmbed], components: [row], ephemeral: true });
+            }
+
+            if (customId === 'ignore_alert') return await interaction.update({ content: '✅ Alerta ignorada.', embeds: [], components: [] });
+        }
+
+        // --- C. FALLBACKS Y OTROS SISTEMAS ---
+        // Tickets
+        if (customId.includes('ticket') || customId.startsWith('t_') || customId.includes('close')) {
             return await handleTicketInteractions(interaction);
         }
-
-        // B. Despachos
-        const despachoCmd = client.prefixInteractions.get('despacho');
+        // Despachos
         if (customId.startsWith('apr_desp_') || customId.startsWith('den_desp_')) {
-            return await despachoCmd?.handleButtons(interaction);
+            return await client.prefixInteractions.get('despacho')?.handleButtons(interaction);
         }
-
-        // C. Apertura / Cierre
+        // Apertura
         if (customId.match(/^(confirm_|abort_|modal_setup|modal_resumen|apertura)/)) {
-            const cmd = client.commands.get('apertura');
-            if (cmd?.handleAperturaInteractions) return await cmd.handleAperturaInteractions(interaction);
+            return await client.commands.get('apertura')?.handleAperturaInteractions(interaction);
         }
-
-        // D. Tiendas y Sistemas Dinámicos
+        // Tiendas
         if (customId === 'comprar_tienda') return await client.commands.get('tienda')?.handleTiendaInteractions(interaction);
         if (customId === 'comprar_blackmarket') return await client.commands.get('blackmarket')?.handleBlackmarketInteractions(interaction);
-        if (customId === 'seleccionar_coche_matricula') return await client.commands.get('cambiarmatricula')?.handleMatriculaInteractions(interaction);
 
-        // E. Manejadores por Prefijo de ID (dni_, vehiculo_, multar_, detencion_)
+        // Handler Automático por Prefijo (dni_, multa_, etc)
         const prefix = customId.split('_')[0];
         const cmd = client.commands.get(prefix) || client.commands.get(customId);
-
         if (cmd) {
             if (interaction.isButton() && cmd.handleButtons) return await cmd.handleButtons(interaction);
             if (interaction.isModalSubmit() && cmd.handleModal) return await cmd.handleModal(interaction);
-            
             const genericHandler = `handle${prefix.charAt(0).toUpperCase() + prefix.slice(1)}Interactions`;
             if (cmd[genericHandler]) return await cmd[genericHandler](interaction);
         }
 
-        // F. Fallbacks para Modales específicos
-        if (customId.startsWith('modal_multa_')) return await client.commands.get('multar')?.handleMultaInteractions(interaction);
-        if (customId.startsWith('modal_detencion_')) return await client.commands.get('detencion')?.handleDetencionInteractions(interaction);
-
     } catch (error) {
         console.error(`❌ Error en interacción [${customId}]:`, error);
-        if (!interaction.replied) {
-            await interaction.reply({ content: 'Hubo un error al procesar esta acción.', ephemeral: true }).catch(() => {});
-        }
+        if (!interaction.replied) await interaction.reply({ content: 'Error procesando la acción.', ephemeral: true }).catch(() => {});
     }
 });
 
@@ -242,170 +312,20 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageReactionAdd', async (reaction, user) => {
     if (user.bot) return;
     if (reaction.partial) await reaction.fetch().catch(() => {});
-    const cmd = client.commands.get('apertura');
-    if (cmd?.handleReactions) await cmd.handleReactions(reaction, user);
+    await client.commands.get('apertura')?.handleReactions?.(reaction, user);
 });
 
-// --- 🏢 SISTEMA DE VOZ (DESPACHOS) ---
+// --- 🏢 SISTEMA DE VOZ ---
 client.on('voiceStateUpdate', async (oldState, newState) => {
     if (newState.member?.user.bot) return;
     const despachoCmd = client.prefixInteractions.get('despacho');
-    if (!despachoCmd) return;
-
-    if (newState.channelId === despachoCmd.salaEsperaId && oldState.channelId !== newState.channelId) {
-        try {
-            await despachoCmd.handleWaitingRoom(oldState, newState);
-        } catch (error) { console.error("❌ Error despacho voz:", error); }
+    if (newState.channelId === despachoCmd?.salaEsperaId && oldState.channelId !== newState.channelId) {
+        await despachoCmd.handleWaitingRoom(oldState, newState).catch(console.error);
     }
 });
 
-// 🛡️ MANEJO DE ERRORES GLOBALES (Previene caídas por ataques o bugs)
+// 🛡️ ERRORES GLOBALES
 process.on('unhandledRejection', error => console.error('Unhandled promise rejection:', error));
 process.on('uncaughtException', error => console.error('Uncaught exception:', error));
-
-
-// ANTI ALTS
-client.on(Events.InteractionCreate, async interaction => {
-    if (interaction.isButton()) {
-        const [action, targetId] = interaction.customId.split('_');
-        
-        if (action === 'kick') {
-            const modal = new ModalBuilder()
-                .setCustomId(`modal_kick_${targetId}`)
-                .setTitle('Expulsar Usuario');
-
-            const motivoInput = new TextInputBuilder()
-                .setCustomId('kick_reason')
-                .setLabel('Motivo de la expulsión')
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Ej: Cuenta alt sospechosa / Menos de 24h')
-                .setRequired(true);
-
-            modal.addComponents(new ActionRowBuilder().addComponents(motivoInput));
-            await interaction.showModal(modal);
-        }
-
-        if (action === 'info') {
-            const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-            const userSnap = await db.collection('sanciones_warns').where('usuarioId', '==', targetId).get();
-            
-            const infoEmbed = new EmbedBuilder()
-                .setTitle(`Detalles: ${targetId}`)
-                .setColor('#e1ff00')
-                .setDescription(`Historial completo de warns: **${userSnap.size}**\nEstado en servidor: ${targetMember ? 'Dentro' : 'Fuera'}`);
-
-            const rowInfo = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`kick_${targetId}`)
-                    .setLabel('Expulsar')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId('ignore_alert')
-                    .setLabel('Ignorar')
-                    .setStyle(ButtonStyle.Secondary)
-            );
-
-            await interaction.reply({ embeds: [infoEmbed], components: [rowInfo], ephemeral: true });
-        }
-
-        if (interaction.customId === 'ignore_alert') {
-            await interaction.update({ content: '✅ Alerta ignorada.', embeds: [], components: [] });
-        }
-    }
-
-    if (interaction.isModalSubmit()) {
-        if (interaction.customId.startsWith('modal_kick_')) {
-            const targetId = interaction.customId.split('_')[2];
-            const motivo = interaction.fields.getTextInputValue('kick_reason');
-            const member = await interaction.guild.members.fetch(targetId).catch(() => null);
-
-            if (member) {
-                await member.kick(motivo);
-                await interaction.reply({ content: `✅ <@${targetId}> ha sido expulsado por: ${motivo}`, ephemeral: true });
-            } else {
-                await interaction.reply({ content: '❌ El usuario ya no está en el servidor.', ephemeral: true });
-            }
-        }
-    }
-});
-
-client.on(Events.InteractionCreate, async interaction => {
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_cuarentena_')) {
-        const userId = interaction.user.id;
-        const motivo = interaction.fields.getTextInputValue('motivo_ingreso');
-        const explicacion = interaction.fields.getTextInputValue('explicacion');
-        
-        const canalSecurityId = '1492339602420273241';
-        const canalSecurity = interaction.guild.channels.cache.get(canalSecurityId);
-
-        // Crear Embed para el Staff
-        const embedStaff = new EmbedBuilder()
-            .setColor('#0099ff')
-            .setTitle('📑 Apelación de Cuarentena')
-            .setThumbnail(interaction.user.displayAvatarURL())
-            .addFields(
-                { name: '👤 Usuario', value: `<@${userId}> (\`${userId}\`)`, inline: true },
-                { name: '❓ Motivo percibido', value: motivo },
-                { name: '📝 Explicación del Staff', value: explicacion }
-            )
-            .setFooter({ text: 'Revisar logs y evidencia del bot antes de decidir.' })
-            .setTimestamp();
-
-        const rowDecisiva = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`aceptar_cuarentena_${userId}`)
-                .setLabel('Devolver Rangos')
-                .setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-                .setCustomId(`rechazar_cuarentena_${userId}`)
-                .setLabel('Expulsar y Blacklist')
-                .setStyle(ButtonStyle.Danger)
-        );
-
-        if (canalSecurity) {
-            await canalSecurity.send({ 
-                content: `⚠️ <@&1476768951034970253> Nueva apelación recibida.`, 
-                embeds: [embedStaff],
-                components: [rowDecisiva]
-            });
-        }
-
-        await interaction.reply({ 
-            content: '✅ Tu formulario ha sido enviado al canal de seguridad. Espera una resolución.', 
-            ephemeral: true 
-        });
-    }
-
-    // --- LÓGICA DE BOTONES PARA EL AGENTE DE SEGURIDAD ---
-    if (interaction.isButton()) {
-        const [accion, , targetId] = interaction.customId.split('_');
-        if (accion !== 'aceptar' && accion !== 'rechazar') return;
-
-        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-        const rolCuarentenaId = '1492342183813189783';
-
-        if (accion === 'aceptar') {
-            if (targetMember) {
-                await targetMember.roles.remove(rolCuarentenaId);
-                // Aquí podrías añadir un sistema para devolverle sus roles originales si los guardaste en DB
-                await interaction.reply({ content: `✅ Se ha retirado la cuarentena a <@${targetId}>.`, ephemeral: true });
-            }
-        }
-
-        if (accion === 'rechazar') {
-            if (targetMember) {
-                await targetMember.ban({ reason: 'Apelación de cuarentena rechazada / Blacklist automática' });
-                // Registrar en Blacklist de Firebase
-                await db.collection('blacklist').doc(targetId).set({
-                    usuarioId: targetId,
-                    motivo: 'Falla en apelación de cuarentena (Seguridad)',
-                    fecha: new Date().toISOString()
-                });
-                await interaction.reply({ content: `🚫 <@${targetId}> ha sido baneado y puesto en Blacklist.`, ephemeral: true });
-            }
-        }
-    }
-});
-
 
 client.login(process.env.DISCORD_TOKEN);
