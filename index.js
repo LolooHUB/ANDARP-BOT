@@ -186,6 +186,11 @@ client.on('interactionCreate', async (interaction) => {
     try {
         // --- A. GESTIÓN DE MODALES ---
         if (interaction.isModalSubmit()) {
+            // NUEVO: SISTEMA DE VEHÍCULOS (DGT)
+            if (customId === 'modal_registro_vehiculo') {
+                return await client.commands.get('vehiculo')?.handleVehiculoInteractions(interaction);
+            }
+
             // Sistemas de Identidad
             if (customId === 'modal_crear_dni') return await client.commands.get('dni')?.handleDNIInteractions(interaction);
             if (customId === 'modal_solicitar_licencia') return await client.commands.get('licencia')?.handleLicenciaInteractions(interaction);
@@ -228,8 +233,20 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // --- B. GESTIÓN DE BOTONES ---
+        // --- B. GESTIÓN DE MENÚS DESPLEGABLES (Select Menus) ---
+        if (interaction.isStringSelectMenu()) {
+            if (customId === 'select_tramite_vehiculo') {
+                return await client.commands.get('vehiculo')?.handleVehiculoInteractions(interaction);
+            }
+        }
+
+        // --- C. GESTIÓN DE BOTONES ---
         if (interaction.isButton()) {
+            // NUEVO: SISTEMA DE VEHÍCULOS (APROBAR/DENEGAR)
+            if (customId.startsWith('aprobar_veh_') || customId.startsWith('denegar_veh_')) {
+                return await client.commands.get('vehiculo')?.handleButtons(interaction);
+            }
+
             // Licencias (Aprobar/Denegar)
             if (customId.startsWith('aprobar_lic_') || customId.startsWith('denegar_lic_')) {
                 return await client.commands.get('licencia')?.handleButtons(interaction);
@@ -275,7 +292,7 @@ client.on('interactionCreate', async (interaction) => {
             if (customId === 'ignore_alert') return await interaction.update({ content: '✅ Alerta ignorada.', embeds: [], components: [] });
         }
 
-        // --- C. FALLBACKS Y OTROS SISTEMAS ---
+        // --- D. FALLBACKS Y OTROS SISTEMAS ---
         // Tickets
         if (customId.includes('ticket') || customId.startsWith('t_') || customId.includes('close')) {
             return await handleTicketInteractions(interaction);
