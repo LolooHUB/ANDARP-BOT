@@ -6,7 +6,6 @@ const FormData = require('form-data');
 // --- CONSTANTES DE CONFIGURACIÓN ---
 const CANAL_SANCIONES = '1477387624288354324';
 const CANAL_LOGS_RETIRO = '1482565635715109015';
-const RUTA_LOGO = './attachment/LogoPFP.png';
 
 const staffHierarchy = [
     '1476766248242118697', '1476766796861149284', '1476767536530849822',
@@ -29,7 +28,8 @@ async function uploadToImgBB(attachment) {
     }
 }
 
-module.exports = [
+// --- ESTRUCTURA DE COMANDOS ---
+const commands = [
     {
         // --- COMANDO WARN ---
         data: new SlashCommandBuilder()
@@ -163,3 +163,6 @@ module.exports = [
         }
     }
 ];
+
+// Exportación masiva
+module.exports = commands;
