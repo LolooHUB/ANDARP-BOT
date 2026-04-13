@@ -29,60 +29,61 @@ const transcripts = require('discord-html-transcripts');
 module.exports = {
     // --- 1. GENERACIÓN DEL PANEL PRINCIPAL (LIMPIO Y PROFESIONAL) ---
     async sendTicketPanel(channel) {
-        try {
-            console.log("--------------------------------------------------");
-            console.log("🚀 INICIALIZANDO NÚCLEO DE TICKETS: ANDA RP");
-            console.log("--------------------------------------------------");
+    try {
+        const mainEmbed = new EmbedBuilder()
+            .setColor('#050505')
+            .setTitle('🏛️ Centro de Atención al Ciudadano - Anda RP')
+            .setAuthor({ 
+                name: 'Administración Superior Anda RP', 
+                iconURL: 'attachment://LogoPFP.png' 
+            })
+            .setDescription(
+                'Bienvenido al nexo de comunicación oficial del servidor. ' +
+                'Nuestro equipo de soporte está capacitado para resolver tus dudas y solicitudes con la mayor eficiencia posible.\n\n' +
+                '**CATEGORÍAS DISPONIBLES:**\n' +
+                '📡 **Soporte General:** Inconvenientes técnicos, bugs o dudas sobre el servidor.\n' +
+                '🚫 **Reportes:** Denuncias de infracciones de normativa por parte de otros usuarios.\n' +
+                '🤝 **Alianzas:** Relaciones externas, convenios y colaboraciones con otros proyectos.\n' +
+                '👨‍⚖️ **Facciones:** Trámites de ingreso, dudas legales o gestión de bandas/mafias.\n\n' +
+                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+                '⚠️ **AVISO DE PRIORIDAD AUTOMÁTICA:**\n' +
+                '*Nuestro sistema detecta automáticamente tu rango en la ciudad. Si posees beneficios de ciudadano VIP, ' +
+                'tu solicitud será redirigida automáticamente a la cola de alta prioridad sin necesidad de selección manual.*'
+            )
+            .addFields(
+                { name: '🛡️ SEGURIDAD', value: 'Cada ticket genera una transcripción cifrada que se guarda en nuestra base de datos para evitar casos de corrupción o abuso de poder.', inline: false },
+                { name: '⏱️ TIEMPOS ESTIMADOS', value: '• **Estándar:** 12 a 24 horas.\n• **VIP / Prioridad:** Menos de 4 horas.', inline: false},
+            )
+            // Cambiado a setImage para que luzca como un banner real abajo
+            .setImage('attachment://BannerTickets.png') 
+            .setFooter({ 
+                text: 'Anda RP - Infraestructura de Soporte 2026 | Desarrollado para Calidad', 
+                iconURL: 'attachment://LogoPFP.png' 
+            })
+            .setTimestamp();
 
-            const mainEmbed = new EmbedBuilder()
-                .setColor('#050505')
-                .setTitle('🏛️ Centro de Atención al Ciudadano - Anda RP')
-                .setAuthor({ 
-                    name: 'Administración Superior Anda RP', 
-                    iconURL: 'attachment://LogoPFP.png' 
-                })
-                .setDescription(
-                    'Bienvenido al nexo de comunicación oficial del servidor. ' +
-                    'Nuestro equipo de soporte está capacitado para resolver tus dudas y solicitudes con la mayor eficiencia posible.\n\n' +
-                    '**CATEGORÍAS DISPONIBLES:**\n' +
-                    '📡 **Soporte General:** Inconvenientes técnicos, bugs o dudas sobre el servidor.\n' +
-                    '🚫 **Reportes:** Denuncias de infracciones de normativa por parte de otros usuarios.\n' +
-                    '🤝 **Alianzas:** Relaciones externas, convenios y colaboraciones con otros proyectos.\n' +
-                    '👨‍⚖️ **Facciones:** Trámites de ingreso, dudas legales o gestión de bandas/mafias.\n\n' +
-                    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                    '⚠️ **AVISO DE PRIORIDAD AUTOMÁTICA:**\n' +
-                    '*Nuestro sistema detecta automáticamente tu rango en la ciudad. Si posees beneficios de ciudadano VIP, ' +
-                    'tu solicitud será redirigida automáticamente a la cola de alta prioridad sin necesidad de selección manual.*'
-                )
-                .addFields(
-                    { name: '🛡️ SEGURIDAD', value: 'Cada ticket genera una transcripción cifrada que se guarda en nuestra base de datos para evitar casos de corrupción o abuso de poder.', inline: false },
-                    { name: '⏱️ TIEMPOS ESTIMADOS', value: '• **Estándar:** 12 a 24 horas.\n• **VIP / Prioridad:** Menos de 4 horas.', inline: false},
-                )
-                .setThumbnail('attachment://BannerTickets.png')
-                .setFooter({ 
-                    text: 'Anda RP - Infraestructura de Soporte 2026 | Desarrollado para Calidad', 
-                    iconURL: 'attachment://LogoPFP.png' 
-                })
-                .setTimestamp();
+        const actionRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('t_general').setLabel('Soporte General').setEmoji('📡').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('t_reporte').setLabel('Reportes').setEmoji('🚫').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('t_alianza').setLabel('Alianzas').setEmoji('🤝').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('t_facciones').setLabel('Facciones').setEmoji('👨‍⚖️').setStyle(ButtonStyle.Secondary)
+        );
 
-            const actionRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('t_general').setLabel('Soporte General').setEmoji('📡').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('t_reporte').setLabel('Reportes').setEmoji('🚫').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('t_alianza').setLabel('Alianzas').setEmoji('🤝').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('t_facciones').setLabel('Facciones').setEmoji('👨‍⚖️').setStyle(ButtonStyle.Secondary)
-            );
+        // ✅ LA CLAVE: Añadir ambos archivos aquí
+        await channel.send({ 
+            embeds: [mainEmbed], 
+            components: [actionRow], 
+            files: [
+                './attachment/LogoPFP.png', 
+                './attachment/BannerTickets.png' // <-- Faltaba este archivo
+            ] 
+        });
 
-            await channel.send({ 
-                embeds: [mainEmbed], 
-                components: [actionRow], 
-                files: ['./attachment/LogoPFP.png'] 
-            });
-
-            console.log("✅ PANEL DESPLEGADO: El sistema está listo para recibir solicitudes.");
-        } catch (error) {
-            console.error("❌ ERROR CRÍTICO AL ENVIAR PANEL:", error);
-        }
-    },
+        console.log("✅ PANEL DESPLEGADO CON BANNER");
+    } catch (error) {
+        console.error("❌ ERROR AL ENVIAR PANEL:", error);
+    }
+},
 
     // --- 2. MANEJO CENTRALIZADO DE INTERACCIONES (MOTOR DE LÓGICA) ---
     async handleTicketInteractions(interaction) {
