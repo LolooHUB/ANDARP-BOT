@@ -6,29 +6,44 @@ const {
     ButtonStyle, 
     ModalBuilder, 
     TextInputBuilder, 
-    TextInputStyle 
+    TextInputStyle,
+    PermissionFlagsBits 
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 const fs = require('fs');
+const path = require('path');
+
+// --- ⚙️ CONFIGURACIÓN DE CANALES Y CONSTANTES ---
+const CANAL_ESTADO_ID = '1493197563934019685';
+const CANAL_CODIGO_ID = '1493197387081191434';
+const CANAL_SESIONES_ID = '1489830006979956787';
+const CANAL_LOGS_ID = '1482565635715109015';
+const CODIGO_SERVER = 'TwjxC';
+
+// --- 🛡️ ROLES DE STAFF AUTORIZADOS ---
+const ROLES_STAFF = [
+    '1476767461024989326',
+    '1476767863636234487',
+    '1476768334048661586',
+    '1476768951034970253'
+];
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('apertura')
-        .setDescription('🚀 Sistema de gestión de sesiones (Votaciones por reacciones).'),
+        .setDescription('🚀 Sistema integral de gestión de sesiones y control de canales de estado.'),
 
+    /**
+     * @param {import('discord.js').ChatInputCommandInteraction} interaction 
+     */
     async execute(interaction) {
-        // --- 🛡️ RESTRICCIÓN DE ROLES ---
-        const rolesPermitidos = [
-            '1476767461024989326', // STAFF IDs
-            '1476767863636234487',
-            '1476768334048661586',
-            '1476768951034970253'
-        ];
+        const { member, guild } = interaction;
 
-        const tienePermiso = interaction.member.roles.cache.some(role => rolesPermitidos.includes(role.id));
+        // 1. Verificación de permisos de Staff
+        const tienePermiso = member.roles.cache.some(role => ROLES_STAFF.includes(role.id));
         if (!tienePermiso) {
             return interaction.reply({
-                content: '❌ No tienes los permisos necesarios para gestionar la apertura del servidor.',
+                content: '❌ No cuentas con la jerarquía necesaria para ejecutar este comando.',
                 ephemeral: true
             });
         }
@@ -38,202 +53,248 @@ module.exports = {
             const stateDoc = await docRef.get();
             const data = stateDoc.exists ? stateDoc.data() : { open: false, voting: false };
 
-            // 1️⃣ SI HAY UNA VOTACIÓN ACTIVA: Opción de cancelar
+            // Caso A: Votación en curso
             if (data.voting) {
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('confirm_cancel_vote').setLabel('Cancelar Votación').setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId('abort_action').setLabel('Mantener').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('abort_action').setLabel('Volver').setStyle(ButtonStyle.Secondary)
                 );
                 return interaction.reply({
-                    content: '⚠️ **Hay una votación en curso.** ¿Deseas cancelarla?',
+                    content: '⚠️ **Alerta:** Existe una votación activa en este momento. ¿Deseas interrumpirla?',
                     components: [row],
                     ephemeral: true
                 });
             }
 
-            // 2️⃣ SI EL SERVIDOR YA ESTÁ ABIERTO: Opción de cerrar
+            // Caso B: Sesión ya abierta
             if (data.open) {
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('confirm_open_modal_cierre').setLabel('Cerrar Sesión').setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId('abort_action').setLabel('Mantener Abierta').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('confirm_open_modal_cierre').setLabel('Cerrar Servidor').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('abort_action').setLabel('Mantener Abierto').setStyle(ButtonStyle.Secondary)
                 );
                 return interaction.reply({
-                    content: '🛑 **El servidor está abierto.** ¿Deseas finalizar la sesión actual?',
+                    content: '🛑 **Aviso:** El servidor se encuentra actualmente en estado: **ABIERTO**. ¿Proceder al cierre?',
                     components: [row],
                     ephemeral: true
                 });
             }
 
-            // 3️⃣ SI NO HAY NADA ACTIVO: Iniciar Setup de Nueva Sesión
-            const modal = new ModalBuilder().setCustomId('modal_setup_rol').setTitle('Configurar Nueva Sesión');
+            // Caso C: Configuración de nueva sesión
+            const modal = new ModalBuilder().setCustomId('modal_setup_rol').setTitle('Configuración de Sesión');
             
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('hora_rol')
-                        .setLabel("⏰ ¿A qué hora empieza el rol?")
-                        .setStyle(TextInputStyle.Short)
-                        .setPlaceholder("Ej: 22:30 ESP / 18:30 ARG")
-                        .setRequired(true)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('min_gente')
-                        .setLabel("👥 Mínimo de votos ✅ para abrir")
-                        .setStyle(TextInputStyle.Short)
-                        .setPlaceholder("Solo números (Ej: 12)")
-                        .setMaxLength(2)
-                        .setRequired(true)
-                )
+            const inputHora = new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('hora_rol')
+                    .setLabel("⏰ Hora de Inicio")
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder("Ej: 22:30 ESP / 18:30 ARG")
+                    .setRequired(true)
             );
 
-            return await interaction.showModal(modal);
+            const inputVotos = new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('min_gente')
+                    .setLabel("👥 Mínimo de Votos Positivos")
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder("Cantidad necesaria (Ej: 10)")
+                    .setMaxLength(2)
+                    .setRequired(true)
+            );
+
+            modal.addComponents(inputHora, inputVotos);
+            await interaction.showModal(modal);
 
         } catch (error) {
-            console.error("Error en Execute Apertura:", error);
-            return interaction.reply({ content: "❌ Error al leer la base de datos.", ephemeral: true });
+            console.error("Error en Apertura Execute:", error);
+            if (!interaction.replied) {
+                return interaction.reply({ content: "❌ Error crítico al conectar con la base de datos.", ephemeral: true });
+            }
         }
     },
 
-    // --- MANEJO DE INTERACCIONES (Botones y Modales) ---
+    /**
+     * @param {import('discord.js').Interaction} interaction 
+     */
     async handleAperturaInteractions(interaction) {
         const { customId, fields, guild, user } = interaction;
-        const canalSesiones = guild.channels.cache.get('1489830006979956787');
-        const canalLogs = guild.channels.cache.get('1482565635715109015');
         const docRef = db.collection('server_state').doc('current');
+        
+        const canalEstado = guild.channels.cache.get(CANAL_ESTADO_ID);
+        const canalCodigo = guild.channels.cache.get(CANAL_CODIGO_ID);
+        const canalSesiones = guild.channels.cache.get(CANAL_SESIONES_ID);
+        const canalLogs = guild.channels.cache.get(CANAL_LOGS_ID);
 
+        // --- MANEJO DE ABORTO ---
         if (customId === 'abort_action') {
-            return interaction.update({ content: '✅ Acción cancelada.', components: [], ephemeral: true });
+            return interaction.update({ content: '✅ Operación cancelada por el usuario.', components: [], ephemeral: true });
         }
 
-        // Cancelar votación
+        // --- CANCELACIÓN DE VOTACIÓN ---
         if (customId === 'confirm_cancel_vote') {
             await docRef.update({ voting: false, messageId: null, current_votes: 0 });
-            return interaction.update({ content: '🛑 **Votación cancelada con éxito.**', components: [], ephemeral: true });
+            
+            if (canalEstado) await canalEstado.setName('〔🚦〕Estado Server : ❌').catch(console.error);
+            if (canalCodigo) {
+                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(console.error);
+            }
+
+            return interaction.update({ content: '🛑 **Votación anulada.** Los canales han sido restablecidos.', components: [], ephemeral: true });
         }
 
-        // Abrir modal de cierre
+        // --- APERTURA MODAL CIERRE ---
         if (customId === 'confirm_open_modal_cierre') {
-            const modalCierre = new ModalBuilder().setCustomId('modal_resumen_cierre').setTitle('Finalizar Sesión');
-            modalCierre.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('resumen_final')
-                        .setLabel("📝 Resumen de la sesión")
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setRequired(true)
-                )
+            const modalCierre = new ModalBuilder().setCustomId('modal_resumen_cierre').setTitle('Resumen de Finalización');
+            const inputResumen = new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('resumen_final')
+                    .setLabel("📝 ¿Qué ocurrió en la sesión?")
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
             );
+            modalCierre.addComponents(inputResumen);
             return await interaction.showModal(modalCierre);
         }
 
-        // Procesar Setup de Votación (Modal)
+        // --- PROCESAR SETUP DE VOTACIÓN ---
         if (customId === 'modal_setup_rol') {
             if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
-            
+
             const hora = fields.getTextInputValue('hora_rol');
             const minGente = parseInt(fields.getTextInputValue('min_gente'));
 
-            if (isNaN(minGente)) return interaction.editReply({ content: "❌ Error: El mínimo debe ser un número." });
+            if (isNaN(minGente)) return interaction.editReply({ content: "❌ El mínimo de gente debe ser un valor numérico." });
 
             const embedVotacion = new EmbedBuilder()
-                .setAuthor({ name: "Anda RP | Gestión de Sesiones", iconURL: guild.iconURL() })
-                .setTitle("📊 Votación de Disponibilidad")
-                .setDescription(`Se ha propuesto una sesión de rol.\n\n**Información:**\n⏰ Hora: **${hora}**\n👥 Mínimo requerido: **${minGente} votos ✅**\n\n**¿Cómo votar?**\n✅ - Participaré\n🟨 - Tarde\n❌ - No asistir`)
+                .setAuthor({ name: "Anda RP | Sistema de Sesiones", iconURL: guild.iconURL() })
+                .setTitle("📊 Convocatoria de Disponibilidad")
+                .setDescription(`Se ha propuesto una nueva sesión de rol.\n\n**Detalles:**\n⏰ Hora: **${hora}**\n👥 Requisito: **${minGente} votos ✅**\n\n**Reacciones:**\n✅: Asistiré\n🟨: Llegaré tarde\n❌: No puedo asistir`)
                 .setColor(0xF1C40F)
-                .setFooter({ text: "Sistema de Reacciones Activo" });
+                .setTimestamp()
+                .setFooter({ text: "La sesión se abrirá automáticamente al llegar al meta." });
 
-            const payload = { content: "<@&1476765007344828590>", embeds: [embedVotacion] };
-            if (fs.existsSync('./attachment/BannerVotacion.png')) {
-                embedVotacion.setImage('attachment://BannerVotacion.png');
-                payload.files = ['./attachment/BannerVotacion.png'];
-            }
-
-            const msg = await canalSesiones.send(payload);
+            const msg = await canalSesiones.send({ content: "<@&1476765007344828590>", embeds: [embedVotacion] });
             await msg.react('✅'); await msg.react('🟨'); await msg.react('❌');
 
             await docRef.set({
-                open: false, voting: true, target_votes: minGente,
-                messageId: msg.id, host: user.id, hora_propuesta: hora
+                open: false,
+                voting: true,
+                target_votes: minGente,
+                messageId: msg.id,
+                host: user.id,
+                hora_propuesta: hora
             });
 
-            return interaction.editReply({ content: "✅ Votación lanzada con éxito." });
+            // Actualizar Canales (Votación)
+            if (canalEstado) await canalEstado.setName('〔🚦〕Estado Server : 🔰').catch(console.error);
+            if (canalCodigo) {
+                await canalCodigo.setName('〔🔐〕Codigo Server : Oculto').catch(console.error);
+                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(console.error);
+            }
+
+            return interaction.editReply({ content: "✅ Votación publicada y canales actualizados a modo espera." });
         }
 
-        // Procesar Cierre Final (Modal)
+        // --- PROCESAR CIERRE DE SESIÓN ---
         if (customId === 'modal_resumen_cierre') {
             if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
-            
+
             const resumen = fields.getTextInputValue('resumen_final');
-            const fechaCierre = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+            const ahora = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
 
             await docRef.set({ open: false, voting: false, messageId: null, current_votes: 0 });
 
+            // Actualizar Canales (Cerrado)
+            if (canalEstado) await canalEstado.setName('〔🚦〕Estado Server : ❌').catch(console.error);
+            if (canalCodigo) {
+                await canalCodigo.setName('〔🔐〕Codigo Server : Oculto').catch(console.error);
+                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(console.error);
+            }
+
+            // Logs de Staff
             const embedLog = new EmbedBuilder()
-                .setTitle("🛑 Sesión Finalizada")
+                .setTitle("🛑 Log: Sesión Finalizada")
                 .addFields(
-                    { name: "👤 Host", value: `<@${user.id}>`, inline: true },
-                    { name: "📅 Fecha", value: fechaCierre, inline: true },
-                    { name: "📝 Resumen", value: resumen }
+                    { name: "👤 Responsable", value: `<@${user.id}>`, inline: true },
+                    { name: "📅 Fecha y Hora", value: ahora, inline: true },
+                    { name: "📝 Resumen de Sesión", value: resumen }
                 )
-                .setColor(0xE74C3C);
+                .setColor(0xE74C3C)
+                .setFooter({ text: "Anda RP Logs" });
 
             if (canalLogs) await canalLogs.send({ embeds: [embedLog] });
 
-            const embedPublico = new EmbedBuilder().setTitle("🔴 Servidor Cerrado").setColor(0xE74C3C).setTimestamp();
-            const payloadCierre = { content: "<@&1476765007344828590>", embeds: [embedPublico] };
-            
-            if (fs.existsSync('./attachment/BannerCierre.png')) {
-                embedPublico.setImage('attachment://BannerCierre.png');
-                payloadCierre.files = ['./attachment/BannerCierre.png'];
-            }
+            // Aviso Público
+            const embedPublico = new EmbedBuilder()
+                .setTitle("🔴 Servidor Cerrado")
+                .setDescription("La sesión de rol ha finalizado. Gracias a todos por participar.")
+                .setColor(0xE74C3C)
+                .setTimestamp();
 
-            await canalSesiones.send(payloadCierre);
-            return interaction.editReply({ content: "✅ Sesión cerrada correctamente." });
+            await canalSesiones.send({ content: "<@&1476765007344828590>", embeds: [embedPublico] });
+
+            return interaction.editReply({ content: "✅ Sesión finalizada exitosamente." });
         }
     },
 
-    // --- LÓGICA DE REACCIONES (Detección de votos) ---
+    /**
+     * @param {import('discord.js').MessageReaction} reaction 
+     * @param {import('discord.js').User} user 
+     */
     async handleReactions(reaction, user) {
+        if (user.bot) return;
+
         try {
             const docRef = db.collection('server_state').doc('current');
             const stateDoc = await docRef.get();
             if (!stateDoc.exists) return;
 
             const state = stateDoc.data();
+
+            // Validar si es la votación activa y el emoji correcto
             if (!state.voting || reaction.message.id !== state.messageId || reaction.emoji.name !== '✅') return;
 
-            const votosActuales = reaction.count - 1; // Descontar al bot
+            const votosActuales = reaction.count - 1; // Restamos el voto inicial del bot
 
             if (votosActuales >= state.target_votes) {
+                // Cambiar estado en DB
                 await docRef.update({ open: true, voting: false, messageId: null });
 
-                const embedAbierto = new EmbedBuilder()
-                    .setTitle("🟢 ¡Servidor Abierto!")
-                    .setDescription(`Hemos alcanzado los **${state.target_votes}** votos necesarios.\n\n**Código Servidor:** TwjxC\n👤 Host: <@${state.host}>\n\n¡Los esperamos dentro!`)
-                    .setColor(0x2ECC71);
+                const guild = reaction.message.guild;
+                const canalEstado = guild.channels.cache.get(CANAL_ESTADO_ID);
+                const canalCodigo = guild.channels.cache.get(CANAL_CODIGO_ID);
 
-                const payloadOpen = { content: "<@&1476765007344828590>", embeds: [embedAbierto] };
-                if (fs.existsSync('./attachment/BannerVotacionSI.png')) {
-                    embedAbierto.setImage('attachment://BannerVotacionSI.png');
-                    payloadOpen.files = ['./attachment/BannerVotacionSI.png'];
+                // Actualizar Canales (Abierto)
+                if (canalEstado) await canalEstado.setName('〔🚦〕Estado Server : ✅').catch(console.error);
+                if (canalCodigo) {
+                    await canalCodigo.setName(`〔🔐〕Codigo Server : ${CODIGO_SERVER}`).catch(console.error);
+                    await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true }).catch(console.error);
                 }
 
-                await reaction.message.channel.send(payloadOpen);
+                const embedAbierto = new EmbedBuilder()
+                    .setTitle("🟢 ¡Servidor Oficialmente Abierto!")
+                    .setDescription(`Se ha alcanzado la meta de **${state.target_votes}** participantes.\n\n**Información de Acceso:**\n📌 Código: \`${CODIGO_SERVER}\`\n👤 Host: <@${state.host}>\n\n¡Buen rol a todos!`)
+                    .setColor(0x2ECC71)
+                    .setThumbnail(guild.iconURL());
 
-                // Notificar a los que votaron ✅
+                await reaction.message.channel.send({ content: "<@&1476765007344828590>", embeds: [embedAbierto] });
+
+                // Notificación por MD a los interesados
                 const usuarios = await reaction.users.fetch();
-                usuarios.forEach(async (u) => {
-                    if (u.bot) return;
+                for (const [id, u] of usuarios) {
+                    if (u.bot) continue;
                     try {
                         const embedDM = new EmbedBuilder()
-                            .setTitle("🚀 ¡El servidor ya está abierto!")
-                            .setDescription(`¡Hola ${u.username}! Ya puedes entrar.\n\n**Código:** TwjxC`)
+                            .setTitle("🚀 ¡Hora de entrar!")
+                            .setDescription(`Hola **${u.username}**, el servidor de **Anda RP** ya está abierto.\n\n🔑 Código: \`${CODIGO_SERVER}\``)
                             .setColor(0x2ECC71);
                         await u.send({ embeds: [embedDM] });
-                    } catch (e) { /* DM Bloqueado */ }
-                });
+                    } catch (err) {
+                        // El usuario tiene DMs cerrados
+                    }
+                }
             }
-        } catch (error) { console.error("Error handleReactions:", error); }
+        } catch (error) {
+            console.error("Error en handleReactions:", error);
+        }
     }
 };

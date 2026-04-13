@@ -12,9 +12,11 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent, 
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildMessageReactions, // Requerido para votos
         GatewayIntentBits.GuildVoiceStates
-    ]
+    ],
+    // AÑADE ESTO:
+    partials: ['MESSAGE', 'CHANNEL', 'REACTION'] 
 });
 
 // --- 🛡️ CONFIGURACIÓN DE SEGURIDAD ---
