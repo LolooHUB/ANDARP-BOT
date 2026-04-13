@@ -231,6 +231,11 @@ client.on('interactionCreate', async (interaction) => {
                     return await interaction.reply({ content: `✅ <@${targetId}> expulsado.`, ephemeral: true });
                 }
             }
+            
+            // TICKETS: Captura de Modales (Importante para que no falle el submit)
+            if (customId.startsWith('modal_t_') || customId === 'modal_pre_close') {
+                return await handleTicketInteractions(interaction);
+            }
         }
 
         // --- B. GESTIÓN DE MENÚS DESPLEGABLES (Select Menus) ---
@@ -293,8 +298,8 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // --- D. FALLBACKS Y OTROS SISTEMAS ---
-        // Tickets
-        if (customId.includes('ticket') || customId.startsWith('t_') || customId.includes('close')) {
+        // Tickets (Captura botones y modales de cierre)
+        if (customId.startsWith('t_') || customId.startsWith('ticket_') || customId.includes('close')) {
             return await handleTicketInteractions(interaction);
         }
         // Despachos
