@@ -8,6 +8,13 @@ const {
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 
+// --- 🎨 EMOJIS INTEGRADOS ---
+const E_POLICIA = '<:Aprobado1:1493237545486516224>';
+const E_BAN = '<:Ban:1493314179631681737>';
+const E_EURO = '<:Euro:1493238471555289208>';
+const E_ALERTA = '<:Problema1:1493237859384164362>';
+const E_TICK = '<:TickVerde:1493314122958245938>';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('multar')
@@ -23,7 +30,7 @@ module.exports = {
         // 🛡️ VERIFICAR AUTORIZACIÓN DEL MINISTERIO
         if (!interaction.member.roles.cache.has(ID_ROL_POLICIA)) {
             return interaction.reply({ 
-                content: '❌ No tienes autorización del **Ministerio del Interior** para emitir sanciones.', 
+                content: `${E_BAN} No tienes autorización del **Ministerio del Interior** para emitir sanciones.`, 
                 ephemeral: true 
             });
         }
@@ -36,7 +43,7 @@ module.exports = {
 
         if (!doc.exists) {
             return interaction.reply({ 
-                content: `❌ El ciudadano ${target} no figura en el Registro Civil. No se puede sancionar a alguien sin DNI.`, 
+                content: `${E_ALERTA} El ciudadano ${target} no figura en el Registro Civil. No se puede sancionar a alguien sin DNI.`, 
                 ephemeral: true 
             });
         }
@@ -108,30 +115,30 @@ module.exports = {
                     { name: '👮 Agente emisor', value: `${user}`, inline: true },
                     { name: '📍 Ubicación', value: lugar, inline: true },
                     { name: '📅 Fecha/Hora', value: fecha, inline: true },
-                    { name: '💰 Importe', value: `**${cuantia}€**`, inline: true },
+                    { name: '💰 Importe', value: `**${cuantia}€** ${E_EURO}`, inline: true },
                     { name: '📝 Infracción', value: motivo },
                     { name: '⭐ Impacto en Licencia', value: puntosARestar > 0 ? `Se han detraído **${puntosARestar} puntos**. Puntos actuales: **${nuevosPuntos}**.` : "Sin afectación de puntos." }
                 )
-                .setFooter({ text: 'Ministerio del Interior - Anda RP Catalunya' }) // Actualizado aquí
+                .setFooter({ text: 'Ministerio del Interior - Anda RP Catalunya' })
                 .setTimestamp();
 
             if (canalMultas) await canalMultas.send({ embeds: [embedMulta] });
 
             // 3. RESPUESTA FINAL
             await interaction.reply({ 
-                content: `✅ Sanción registrada correctamente para **${data.nombre}** ante el Ministerio del Interior.`, 
+                content: `${E_TICK} Sanción registrada correctamente para **${data.nombre}** ante el Ministerio del Interior.`, 
                 ephemeral: true 
             });
 
             try {
                 await targetUser.send({ 
-                    content: `⚠️ Has recibido una sanción oficial del **Ministerio del Interior**. Revisa tu historial con \`/dni\`.\n**Infracción:** ${motivo}\n**Importe:** ${cuantia}€` 
+                    content: `${E_ALERTA} Has recibido una sanción oficial del **Ministerio del Interior**. Revisa tu historial con \`/dni\`.\n**Infracción:** ${motivo}\n**Importe:** ${cuantia}€ ${E_EURO}` 
                 });
             } catch (e) { /* DM Cerrado */ }
 
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: "❌ Error crítico al comunicar la sanción al Ministerio.", ephemeral: true });
+            return interaction.reply({ content: `${E_ALERTA} Error crítico al comunicar la sanción al Ministerio.`, ephemeral: true });
         }
     }
 };

@@ -8,6 +8,18 @@ const {
 const { db } = require('../Automatizaciones/firebase');
 const fs = require('fs');
 
+/**
+ * 🛒 MÓDULO DE TIENDA - ANDA RP
+ * INTEGRACIÓN DE EMOJIS PERSONALIZADOS
+ */
+
+// --- 🎨 EMOJIS INTEGRADOS ---
+const E_TIENDA = '<:Carrito:1493313258059333852>';
+const E_EURO = '<:Euro:1493238471555289208>';
+const E_TICK = '<:TickVerde:1493314122958245938>';
+const E_ERROR = '<:Problema1:1493237859384164362>';
+const E_BAN = '<:Ban:1493314179631681737>';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('tienda')
@@ -21,7 +33,7 @@ module.exports = {
         // 1. Restricción de Canal
         if (interaction.channelId !== ID_CANAL_TIENDA) {
             return interaction.reply({ 
-                content: `❌ **Trámite Denegado:** Debes estar físicamente en la tienda oficial: <#${ID_CANAL_TIENDA}>.`, 
+                content: `${E_ERROR} **Trámite Denegado:** Debes estar físicamente en la tienda oficial: <#${ID_CANAL_TIENDA}>.`, 
                 ephemeral: true 
             });
         }
@@ -56,13 +68,13 @@ module.exports = {
                     name: 'BAZAR CENTRAL - SISTEMA DE SUMINISTROS', 
                     iconURL: logo ? 'attachment://LogoPFP.png' : null 
                 })
-                .setTitle('🛒 CATÁLOGO DE PRODUCTOS DISPONIBLES')
+                .setTitle(`${E_TIENDA} CATÁLOGO DE PRODUCTOS DISPONIBLES`)
                 .setColor('#f1c40f')
                 .setThumbnail(logo ? 'attachment://LogoPFP.png' : null)
                 .setDescription(
                     'Bienvenido al mostrador. Elige los productos que necesites.\n' +
-                    '*El cobro se realiza de forma automática desde tu cuenta bancaria.*\n\n' +
-                    CATALOGO.map(i => `${i.emoji} **${i.label}**: \`${i.price.toLocaleString()}€\` | *${i.weight}kg*`).join('\n')
+                    `*El cobro se realiza automáticamente desde tu cuenta* ${E_EURO}\n\n` +
+                    CATALOGO.map(i => `${i.emoji} **${i.label}**: \`${i.price.toLocaleString()}€\` ${E_EURO} | *${i.weight}kg*`).join('\n')
                 )
                 .addFields({ name: '⚠️ Aviso Legal', value: 'No se admiten devoluciones de productos abiertos o usados.' })
                 .setFooter({ text: 'Generalitat de Catalunya - Registro de Comercio' });
@@ -87,7 +99,7 @@ module.exports = {
 
         } catch (error) {
             console.error("Error en Tienda Execute:", error);
-            return interaction.reply({ content: "❌ Error crítico al cargar el catálogo.", ephemeral: true });
+            return interaction.reply({ content: `${E_ERROR} Error crítico al cargar el catálogo.`, ephemeral: true });
         }
     },
 
@@ -115,7 +127,7 @@ module.exports = {
             const doc = await userRef.get();
 
             if (!doc.exists) {
-                return interaction.update({ content: "❌ No apareces en el Registro Civil.", embeds: [], components: [] });
+                return interaction.update({ content: `${E_BAN} No apareces en el Registro Civil.`, embeds: [], components: [] });
             }
 
             const data = doc.data();
@@ -128,7 +140,6 @@ module.exports = {
             
             let pesoTotalActual = 0;
             for (const [id, cantidad] of Object.entries(inventarioActual)) {
-                // Aquí usamos el diccionario local para calcular el peso de lo que ya tiene
                 if (ITEMS[id]) {
                     pesoTotalActual += (ITEMS[id].peso * cantidad);
                 }
@@ -136,14 +147,14 @@ module.exports = {
 
             if (saldoActual < item.costo) {
                 return interaction.update({ 
-                    content: `❌ **${interaction.user.username}**, no tienes fondos suficientes.\nCoste: **${item.costo.toLocaleString()}€** | Saldo: **${saldoActual.toLocaleString()}€**`, 
+                    content: `${E_BAN} **${interaction.user.username}**, no tienes fondos suficientes.\nCoste: **${item.costo.toLocaleString()}€** ${E_EURO} | Saldo: **${saldoActual.toLocaleString()}€**`, 
                     embeds: [], components: [] 
                 });
             }
 
             if (pesoTotalActual + item.peso > capacidadMaxima) {
                 return interaction.update({ 
-                    content: `❌ **${interaction.user.username}**, no puedes cargar más peso.\nActual: **${pesoTotalActual.toFixed(2)}kg** / Límite: **${capacidadMaxima}kg**.`, 
+                    content: `${E_ERROR} **${interaction.user.username}**, no puedes cargar más peso.\nActual: **${pesoTotalActual.toFixed(2)}kg** / Límite: **${capacidadMaxima}kg**.`, 
                     embeds: [], components: [] 
                 });
             }
@@ -157,14 +168,14 @@ module.exports = {
             });
 
             return interaction.update({ 
-                content: `✅ **Compra Exitosa**\n**Producto:** ${item.nombre}\n**Precio:** ${item.costo.toLocaleString()}€\n\n*El objeto ha sido enviado a tu inventario.*`, 
+                content: `${E_TICK} **Compra Exitosa**\n**Producto:** ${item.nombre}\n**Precio:** ${item.costo.toLocaleString()}€ ${E_EURO}\n\n*El objeto ha sido enviado a tu inventario.*`, 
                 embeds: [], 
                 components: [] 
             });
 
         } catch (error) {
             console.error("Error en Transacción de Tienda:", error);
-            return interaction.update({ content: "❌ Error interno al procesar el pago.", embeds: [], components: [] });
+            return interaction.update({ content: `${E_ERROR} Error interno al procesar el pago.`, embeds: [], components: [] });
         }
     }
 };

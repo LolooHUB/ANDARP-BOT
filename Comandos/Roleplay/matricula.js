@@ -1,6 +1,16 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 
+/**
+ * 👮 MÓDULO DE TRÁNSITO - ANDA RP
+ */
+
+// --- 🎨 EMOJIS INTEGRADOS ---
+const E_POLICIA = '<:Aprobado1:1493237545486516224>';
+const E_BAN = '<:Ban:1493314179631681737>';
+const E_ALERTA = '<:Problema1:1493237859384164362>';
+const E_AUTO = '<:AutoR:1493313156452454440>';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('matricula')
@@ -14,7 +24,10 @@ module.exports = {
         const ID_ROL_POLICIA = '1490138479567306864';
         
         if (!interaction.member.roles.cache.has(ID_ROL_POLICIA)) {
-            return interaction.reply({ content: '❌ No tienes acceso a la base de datos de Tránsito.', ephemeral: true });
+            return interaction.reply({ 
+                content: `${E_BAN} No tienes acceso a la base de datos de Tránsito.`, 
+                ephemeral: true 
+            });
         }
 
         const matriculaBuscada = interaction.options.getString('numero').toUpperCase();
@@ -27,23 +40,25 @@ module.exports = {
 
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const veh = data.propiedades.find(v => v.matricula === matriculaBuscada);
-                if (veh) {
-                    propietarioEncontrado = data;
-                    datosVehiculo = veh;
+                if (data.propiedades) {
+                    const veh = data.propiedades.find(v => v.matricula === matriculaBuscada);
+                    if (veh) {
+                        propietarioEncontrado = data;
+                        datosVehiculo = veh;
+                    }
                 }
             });
 
             if (!propietarioEncontrado) {
                 return interaction.reply({ 
-                    content: `⚠️ La matrícula **${matriculaBuscada}** no consta en el registro de la Generalitat.`, 
+                    content: `${E_ALERTA} La matrícula **${matriculaBuscada}** no consta en el registro de la Generalitat.`, 
                     ephemeral: true 
                 });
             }
 
             const embed = new EmbedBuilder()
                 .setAuthor({ name: 'MINISTERIO DEL INTERIOR - CONTROL DE TRÁNSITO', iconURL: 'https://i.imgur.com/8L8O7vU.png' })
-                .setTitle(`📋 Informe de Vehículo: ${matriculaBuscada}`)
+                .setTitle(`${E_POLICIA} Informe de Vehículo: ${matriculaBuscada}`)
                 .setColor(0x3498DB)
                 .addFields(
                     { name: '🚗 Vehículo', value: datosVehiculo.modelo, inline: true },
@@ -60,7 +75,7 @@ module.exports = {
 
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: "❌ Error al consultar la base de datos vehicular.", ephemeral: true });
+            return interaction.reply({ content: `${E_ALERTA} Error al consultar la base de datos vehicular.`, ephemeral: true });
         }
     }
 };

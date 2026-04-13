@@ -2,6 +2,15 @@ const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discor
 const { db } = require('../Automatizaciones/firebase');
 const fs = require('fs');
 
+/**
+ * 🎒 MÓDULO DE INVENTARIO - ANDA RP
+ */
+
+// --- 🎨 EMOJIS INTEGRADOS ---
+const E_EURO = '<:Euro:1493238471555289208>';
+const E_ALERTA = '<:Problema1:1493237859384164362>';
+const E_BAN = '<:Ban:1493314179631681737>';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('mochila')
@@ -14,7 +23,7 @@ module.exports = {
             const userRef = db.collection('usuarios_rp').doc(interaction.user.id);
             const doc = await userRef.get();
 
-            if (!doc.exists) return interaction.reply({ content: "❌ No tienes DNI registrado.", ephemeral: true });
+            if (!doc.exists) return interaction.reply({ content: `${E_BAN} No tienes DNI registrado.`, ephemeral: true });
 
             const data = doc.data();
             const inv = data.inventario || {}; 
@@ -80,7 +89,7 @@ module.exports = {
                 .addFields(
                     { name: '📥 Objetos y Carga', value: listaFinal },
                     { name: '📊 Peso Total', value: `\`${pesoTotal.toFixed(2)} / ${capacidadMax} kg\``, inline: true },
-                    { name: '💳 Banco', value: `\`${(data.banco || 0).toLocaleString()}€\``, inline: true }
+                    { name: '💳 Banco', value: `\`${(data.banco || 0).toLocaleString()}€\`` + ` ${E_EURO}`, inline: true }
                 )
                 .setFooter({ text: 'Anda RP - Sistema de Suministros' })
                 .setTimestamp();
@@ -89,7 +98,7 @@ module.exports = {
 
         } catch (error) {
             console.error("Error en Mochila:", error);
-            return interaction.reply({ content: "❌ Error al abrir la mochila.", ephemeral: true });
+            return interaction.reply({ content: `${E_ALERTA} Error al abrir la mochila.`, ephemeral: true });
         }
     }
 };

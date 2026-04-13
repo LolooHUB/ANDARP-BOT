@@ -10,6 +10,17 @@ const {
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 
+/**
+ * 🚗 MÓDULO DE LICENCIAS DE CONDUCCIÓN - ANDA RP
+ */
+
+// --- 🎨 EMOJIS INTEGRADOS ---
+const E_DOC = '<:Aprobado1:1493237545486516224>';
+const E_AUTO = '<:AutoR:1493313156452454440>';
+const E_TICK = '<:TickVerde:1493314122958245938>';
+const E_BAN = '<:Ban:1493314179631681737>';
+const E_ALERTA = '<:Problema1:1493237859384164362>';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('licencia')
@@ -20,19 +31,19 @@ module.exports = {
                 .setRequired(false)),
 
     async execute(interaction) {
-        // --- 🛡️ NUEVO CANAL ESPECÍFICO PARA LICENCIAS ---
+        // --- 🛡️ CONFIGURACIÓN DE CANAL Y ROL ---
         const ID_CANAL_PERMITIDO = '1490132246022193264'; 
         const ID_ROL_VERIFICADO = '1476791384894865419';
 
         if (interaction.channelId !== ID_CANAL_PERMITIDO) {
             return interaction.reply({ 
-                content: `❌ Este trámite solo puede realizarse en el canal de Tránsito: <#${ID_CANAL_PERMITIDO}>.`, 
+                content: `${E_ALERTA} Este trámite solo puede realizarse en el canal de Tránsito: <#${ID_CANAL_PERMITIDO}>.`, 
                 ephemeral: true 
             });
         }
 
         if (!interaction.member.roles.cache.has(ID_ROL_VERIFICADO)) {
-            return interaction.reply({ content: '❌ Debes estar **Verificado** para acceder a este trámite.', ephemeral: true });
+            return interaction.reply({ content: `${E_BAN} Debes estar **Verificado** para acceder a este trámite.`, ephemeral: true });
         }
 
         const target = interaction.options.getUser('usuario') || interaction.user;
@@ -43,7 +54,7 @@ module.exports = {
             const doc = await userRef.get();
 
             if (!doc.exists) {
-                return interaction.reply({ content: "❌ No existe un perfil ciudadano asociado. Usa `/dni` primero.", ephemeral: true });
+                return interaction.reply({ content: `${E_ALERTA} No existe un perfil ciudadano asociado. Usa \`/dni\` primero.`, ephemeral: true });
             }
 
             const data = doc.data();
@@ -52,7 +63,7 @@ module.exports = {
             if (data.licencias.conducir.estado) {
                 const embedCarnet = new EmbedBuilder()
                     .setAuthor({ name: `SERVICIO CATALÁN DE TRÁNSITO`, iconURL: interaction.guild.iconURL() })
-                    .setTitle(`🪪 PERMISO DE CONDUCCIÓN - CLASE ${data.licencias.conducir.tipo}`)
+                    .setTitle(`${E_DOC} PERMISO DE CONDUCCIÓN - CLASE ${data.licencias.conducir.tipo}`)
                     .setThumbnail(target.displayAvatarURL({ dynamic: true }))
                     .setColor(0x00A1DE)
                     .addFields(
@@ -77,12 +88,12 @@ module.exports = {
                 );
                 return await interaction.showModal(modal);
             } else {
-                return interaction.reply({ content: `❌ El ciudadano **${target.username}** no dispone de licencia.`, ephemeral: true });
+                return interaction.reply({ content: `${E_ALERTA} El ciudadano **${target.username}** no dispone de licencia.`, ephemeral: true });
             }
 
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: "❌ Error en el servidor de Tránsito.", ephemeral: true });
+            return interaction.reply({ content: `${E_ALERTA} Error en el servidor de Tránsito.`, ephemeral: true });
         }
     },
 
@@ -95,7 +106,7 @@ module.exports = {
         const canalRevision = guild.channels.cache.get('1490132369175351397');
 
         const embedStaff = new EmbedBuilder()
-            .setTitle("📄 Solicitud de Tránsito Pendiente")
+            .setTitle(`${E_AUTO} Solicitud de Tránsito Pendiente`)
             .setColor(0xF1C40F)
             .addFields(
                 { name: '👤 Solicitante', value: `${user}`, inline: true },
@@ -106,12 +117,12 @@ module.exports = {
             .setTimestamp();
 
         const botones = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`aprobar_lic_${user.id}_${tipo}`).setLabel('Aprobar').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`denegar_lic_${user.id}`).setLabel('Denegar').setStyle(ButtonStyle.Danger)
+            new ButtonBuilder().setCustomId(`aprobar_lic_${user.id}_${tipo}`).setLabel('Aprobar').setStyle(ButtonStyle.Success).setEmoji('✅'),
+            new ButtonBuilder().setCustomId(`denegar_lic_${user.id}`).setLabel('Denegar').setStyle(ButtonStyle.Danger).setEmoji('✖️')
         );
 
         if (canalRevision) await canalRevision.send({ content: '🚨 **Nueva solicitud de tránsito**', embeds: [embedStaff], components: [botones] });
-        return interaction.reply({ content: "✅ Solicitud enviada correctamente al Servicio de Tránsito.", ephemeral: true });
+        return interaction.reply({ content: `${E_TICK} Solicitud enviada correctamente al Servicio de Tránsito.`, ephemeral: true });
     },
 
     async handleButtons(interaction) {
@@ -126,11 +137,11 @@ module.exports = {
                 'licencias.conducir.fecha_exp': new Date().toLocaleDateString('es-ES'),
                 'licencias.conducir.puntos': 12
             });
-            await interaction.update({ content: `✅ Permiso **Clase ${clase}** aprobado para <@${targetId}>.`, embeds: [], components: [] });
-            try { await targetUser.send(`🚗 ¡Tu permiso de conducción **Clase ${clase}** ha sido aprobado! Consúltalo con \`/licencia\`.`); } catch(e){}
+            await interaction.update({ content: `${E_TICK} Permiso **Clase ${clase}** aprobado para <@${targetId}>.`, embeds: [], components: [] });
+            try { await targetUser.send(`${E_AUTO} ¡Tu permiso de conducción **Clase ${clase}** ha sido aprobado! Consúltalo con \`/licencia\`.`); } catch(e){}
         } else {
-            await interaction.update({ content: `❌ Solicitud de <@${targetId}> denegada.`, embeds: [], components: [] });
-            try { await targetUser.send("⚠️ Tu solicitud de permiso de conducción ha sido rechazada."); } catch(e){}
+            await interaction.update({ content: `${E_BAN} Solicitud de <@${targetId}> denegada.`, embeds: [], components: [] });
+            try { await targetUser.send(`${E_ALERTA} Tu solicitud de permiso de conducción ha sido rechazada.`); } catch(e){}
         }
     }
 };

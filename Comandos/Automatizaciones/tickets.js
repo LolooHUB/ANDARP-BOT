@@ -56,10 +56,9 @@ module.exports = {
                 )
                 .addFields(
                     { name: '🛡️ SEGURIDAD', value: 'Cada ticket genera una transcripción cifrada que se guarda en nuestra base de datos para evitar casos de corrupción o abuso de poder.', inline: false },
-                    { name: '⏱️ TIEMPOS ESTIMADOS', value: '• **Estándar:** 12 a 24 horas.\n• **VIP / Prioridad:** Menos de 4 horas.', inline: true },
-                    { name: '🆔 SISTEMA V5.0', value: 'Protocolo de Escalado Activo.', inline: true }
+                    { name: '⏱️ TIEMPOS ESTIMADOS', value: '• **Estándar:** 12 a 24 horas.\n• **VIP / Prioridad:** Menos de 4 horas.', inline: false},
                 )
-                .setThumbnail('https://i.imgur.com/Tu7Gz2T.png')
+                .setThumbnail('attachment://BannerTickets.png')
                 .setFooter({ 
                     text: 'Anda RP - Infraestructura de Soporte 2026 | Desarrollado para Calidad', 
                     iconURL: 'attachment://LogoPFP.png' 
@@ -100,6 +99,7 @@ module.exports = {
         const rolVipId = '1476765603418079434'; 
         const pingNotificacionesId = '1476800914818859018';
         const logoPath = './attachment/LogoPFP.png';
+        const bannerPath = './attachment/BannerTickets.png';
 
         // JERARQUÍA MAESTRA DE STAFF (0 a 9)
         const staffHierarchy = [

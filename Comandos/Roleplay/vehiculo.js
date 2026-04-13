@@ -17,6 +17,15 @@ const fs = require('fs');
  * ---------------------------------------------------------
  */
 
+// --- 🎨 EMOJIS INTEGRADOS ---
+const E_AUTO = '<:AutoR:1493313156452454440>';
+const E_CARRITO = '<:Carrito:1493313258059333852>';
+const E_TICK = '<:TickVerde:1493314122958245938>';
+const E_EURO = '<:Euro:1493238471555289208>';
+const E_BAN = '<:Ban:1493314179631681737>';
+const E_DOC = '<:Aprobado1:1493237545486516224>';
+const E_ALERTA = '<:Problema1:1493237859384164362>';
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('vehiculo')
@@ -29,7 +38,7 @@ module.exports = {
         // 1. Validación de Canal Obligatoria
         if (interaction.channelId !== ID_CANAL_VEHICULOS) {
             return interaction.reply({ 
-                content: `❌ **Protocolo Incorrecto:** Los trámites de la DGT se gestionan exclusivamente en <#${ID_CANAL_VEHICULOS}>.`, 
+                content: `${E_ALERTA} **Protocolo Incorrecto:** Los trámites de la DGT se gestionan exclusivamente en <#${ID_CANAL_VEHICULOS}>.`, 
                 flags: MessageFlags.Ephemeral 
             });
         }
@@ -42,7 +51,7 @@ module.exports = {
             // 2. Validación de Existencia de DNI
             if (!doc.exists) {
                 return interaction.reply({ 
-                    content: "❌ **Sin Identificación:** No apareces en el Registro Civil. Usa `/dni` antes de registrar un vehículo.", 
+                    content: `${E_BAN} **Sin Identificación:** No apareces en el Registro Civil. Usa \`/dni\` antes de registrar un vehículo.`, 
                     flags: MessageFlags.Ephemeral 
                 });
             }
@@ -64,15 +73,15 @@ module.exports = {
 
                 const embedMenu = new EmbedBuilder()
                     .setAuthor({ name: 'DGT - DEPARTAMENTO DE TRÁFICO', iconURL: logoName })
-                    .setTitle('🏛️ GESTIÓN DE PROPIEDADES MOTORIZADAS')
+                    .setTitle(`${E_AUTO} GESTIÓN DE PROPIEDADES MOTORIZADAS`)
                     .setColor('#F1C40F')
                     .setThumbnail(logoName)
                     .setDescription(
                         'Bienvenido al sistema central de la DGT. Selecciona una acción en el menú inferior.\n\n' +
-                        '💰 **TASAS DE MATRICULACIÓN:**\n' +
+                        `${E_EURO} **TASAS DE MATRICULACIÓN:**\n` +
                         '• 👴 **Clásicos (< 2015):** 15,000€\n' +
                         '• ✨ **Modernos (2015+):** 22,000€\n\n' +
-                        '⚠️ *El cobro se procesa automáticamente tras la aprobación de un Inspector de Tráfico.*'
+                        `${E_ALERTA} *El cobro se procesa automáticamente tras la aprobación de un Inspector de Tráfico.*`
                     )
                     .addFields({ 
                         name: '📊 TU GARAJE', 
@@ -112,7 +121,7 @@ module.exports = {
 
         } catch (error) {
             console.error("🔴 Error Crítico en Execute Vehiculo:", error);
-            return interaction.reply({ content: "❌ Error interno al conectar con la base de datos de la DGT.", flags: MessageFlags.Ephemeral });
+            return interaction.reply({ content: `${E_ALERTA} Error interno al conectar con la base de datos de la DGT.`, flags: MessageFlags.Ephemeral });
         }
     },
 
@@ -180,7 +189,7 @@ module.exports = {
                 const embedPapeles = new EmbedBuilder()
                     .setAuthor({ name: 'DGT - CERTIFICADO DE PROPIEDAD', iconURL: 'https://i.imgur.com/vH8vL4S.png' })
                     .setColor('#2ECC71')
-                    .setTitle(`📋 Ficha Técnica: ${veh.modelo}`)
+                    .setTitle(`${E_DOC} Ficha Técnica: ${veh.modelo}`)
                     .addFields(
                         { name: '👤 Titular Legal', value: `> ${interaction.user.username}`, inline: true },
                         { name: '🆔 Matrícula', value: `> \`${veh.matricula}\``, inline: true },
@@ -207,7 +216,7 @@ module.exports = {
                 
                 // Validar que el año sea un número
                 if (isNaN(anio)) {
-                    return await interaction.editReply({ content: "❌ **Error:** El año debe ser un número válido (ej: 2022)." });
+                    return await interaction.editReply({ content: `${E_ALERTA} **Error:** El año debe ser un número válido (ej: 2022).` });
                 }
 
                 const userRef = db.collection('usuarios_rp').doc(user.id);
@@ -221,7 +230,7 @@ module.exports = {
                 // Validar fondos si no es gratis
                 if (!esGratis && (data.banco || 0) < costoFinal) {
                     return await interaction.editReply({ 
-                        content: `❌ **Fondos Insuficientes:** El trámite cuesta **${costoFinal.toLocaleString()}€** y solo tienes **${(data.banco || 0).toLocaleString()}€** en el banco.` 
+                        content: `${E_BAN} **Fondos Insuficientes:** El trámite cuesta **${costoFinal.toLocaleString()}€** ${E_EURO} y solo tienes **${(data.banco || 0).toLocaleString()}€** en el banco.` 
                     });
                 }
 
@@ -235,11 +244,11 @@ module.exports = {
                 // Notificar al Staff
                 const canalStaff = guild.channels.cache.get('1490132369175351397');
                 if (!canalStaff) {
-                    return await interaction.editReply({ content: "❌ Error: No se encontró el canal de revisión del staff." });
+                    return await interaction.editReply({ content: `${E_ALERTA} Error: No se encontró el canal de revisión del staff.` });
                 }
 
                 const embedStaff = new EmbedBuilder()
-                    .setTitle(esGratis ? "🎁 SOLICITUD DE PRIMER VEHÍCULO (GRATIS)" : "🚀 NUEVA SOLICITUD DE MATRICULACIÓN")
+                    .setTitle(esGratis ? `🎁 ${E_AUTO} SOLICITUD DE PRIMER VEHÍCULO (GRATIS)` : `🚀 ${E_CARRITO} NUEVA SOLICITUD DE MATRICULACIÓN`)
                     .setColor(esGratis ? '#2ECC71' : '#E67E22')
                     .setThumbnail(user.displayAvatarURL())
                     .addFields(
@@ -247,7 +256,7 @@ module.exports = {
                         { name: '🚗 Vehículo', value: `${modelo} (${anio})`, inline: true },
                         { name: '🆔 Matrícula Generada', value: `\`${matricula}\``, inline: true },
                         { name: '🎨 Color Definido', value: color, inline: true },
-                        { name: '💰 Costo del Trámite', value: `**${costoFinal.toLocaleString()}€**`, inline: true },
+                        { name: '💰 Costo del Trámite', value: `**${costoFinal.toLocaleString()}€** ${E_EURO}`, inline: true },
                         { name: '📝 Detalles/Extras', value: `\`\`\`${desc}\`\`\`` }
                     )
                     .setTimestamp();
@@ -256,23 +265,25 @@ module.exports = {
                     new ButtonBuilder()
                         .setCustomId(`aprobar_veh_${user.id}_${matricula}_${modelo.replace(/ /g, '-')}_${costoFinal}_${color.replace(/ /g, '-')}`)
                         .setLabel(esGratis ? 'Aprobar Gratis' : `Cobrar ${costoFinal.toLocaleString()}€ y Aprobar`)
-                        .setStyle(ButtonStyle.Success),
+                        .setStyle(ButtonStyle.Success)
+                        .setEmoji('✅'),
                     new ButtonBuilder()
                         .setCustomId(`denegar_veh_${user.id}`)
                         .setLabel('Denegar Solicitud')
                         .setStyle(ButtonStyle.Danger)
+                        .setEmoji('✖️')
                 );
 
                 await canalStaff.send({ embeds: [embedStaff], components: [botones] });
 
                 return await interaction.editReply({ 
-                    content: `✅ **Trámite Iniciado:** Tu solicitud para el **${modelo}** ha sido enviada a los inspectores de la DGT. Recibirás una notificación cuando sea procesada.` 
+                    content: `${E_TICK} **Trámite Iniciado:** Tu solicitud para el **${modelo}** ha sido enviada a los inspectores de la DGT. Recibirás una notificación cuando sea procesada.` 
                 });
             }
         } catch (e) {
             console.error("🔴 Error en handleVehiculoInteractions:", e);
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: "❌ Ocurrió un error procesando la solicitud.", flags: MessageFlags.Ephemeral });
+                await interaction.reply({ content: `${E_ALERTA} Ocurrió un error procesando la solicitud.`, flags: MessageFlags.Ephemeral });
             }
         }
     },
@@ -285,7 +296,7 @@ module.exports = {
 
             if (accion === 'denegar') {
                 return await interaction.update({ 
-                    content: `❌ **Solicitud Rechazada:** El trámite para <@${targetId}> ha sido denegado por el inspector <@${interaction.user.id}>.`, 
+                    content: `${E_BAN} **Solicitud Rechazada:** El trámite para <@${targetId}> ha sido denegado por el inspector <@${interaction.user.id}>.`, 
                     embeds: [], 
                     components: [] 
                 });
@@ -302,14 +313,14 @@ module.exports = {
                 const doc = await docRef.get();
                 
                 if (!doc.exists) {
-                    return await interaction.followUp({ content: "❌ Error: El usuario ya no existe en la DB.", flags: MessageFlags.Ephemeral });
+                    return await interaction.followUp({ content: `${E_ALERTA} Error: El usuario ya no existe en la DB.`, flags: MessageFlags.Ephemeral });
                 }
 
                 const data = doc.data();
 
                 // Verificar una última vez si tiene dinero (por si lo gastó mientras esperaba)
                 if (costo > 0 && (data.banco || 0) < costo) {
-                    return await interaction.followUp({ content: "❌ El usuario ya no tiene dinero suficiente para este trámite.", flags: MessageFlags.Ephemeral });
+                    return await interaction.followUp({ content: `${E_ALERTA} El usuario ya no tiene dinero suficiente para este trámite.`, flags: MessageFlags.Ephemeral });
                 }
 
                 const nuevoVehiculo = {
@@ -327,7 +338,7 @@ module.exports = {
 
                 // Notificar en el canal del staff
                 await interaction.editReply({ 
-                    content: `✅ **Trámite Finalizado:** Se ha registrado el **${modelo}** [\`${matricula}\`] a <@${targetId}>. Cobro: **${costo.toLocaleString()}€**.`, 
+                    content: `${E_TICK} **Trámite Finalizado:** Se ha registrado el **${modelo}** [\`${matricula}\`] a <@${targetId}>. Cobro: **${costo.toLocaleString()}€** ${E_EURO}.`, 
                     embeds: [], 
                     components: [] 
                 });
@@ -335,7 +346,7 @@ module.exports = {
                 // Intentar notificar al usuario
                 const user = await interaction.client.users.fetch(targetId).catch(() => null);
                 if (user) {
-                    user.send(`🚗 **DGT Informa:** Tu solicitud de matrícula para el **${modelo}** ha sido **APROBADA**. Ya puedes encontrarlo en tu garaje.`).catch(() => {});
+                    user.send(`${E_AUTO} **DGT Informa:** Tu solicitud de matrícula para el **${modelo}** ha sido **APROBADA** ${E_TICK}. Ya puedes encontrarlo en tu garaje.`).catch(() => {});
                 }
             }
         } catch (e) { 
