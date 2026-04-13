@@ -58,7 +58,7 @@ module.exports = {
                     { name: '🛡️ SEGURIDAD', value: 'Cada ticket genera una transcripción cifrada que se guarda en nuestra base de datos para evitar casos de corrupción o abuso de poder.', inline: false },
                     { name: '⏱️ TIEMPOS ESTIMADOS', value: '• **Estándar:** 12 a 24 horas.\n• **VIP / Prioridad:** Menos de 4 horas.', inline: false},
                 )
-                .setThumbnail('attachment://BannerTickets.png')
+                .setThumbnail('./attachment/BannerTickets.png')
                 .setFooter({ 
                     text: 'Anda RP - Infraestructura de Soporte 2026 | Desarrollado para Calidad', 
                     iconURL: 'attachment://LogoPFP.png' 

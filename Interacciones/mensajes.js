@@ -7,10 +7,11 @@ module.exports = {
         }
 
         if (content === '!mod') {
-            return message.reply("Un moderador va a responder tu mensaje lo antes posible, por favor se paciente. 🚨"),
+            await message.reply("Un moderador va a responder tu mensaje lo antes posible, por favor se paciente. 🚨");
             setTimeout(() => {
-                message.reply("Esto es puro rol jeje", { ephemeral: true });
+                message.reply("Esto es puro rol jeje");
             }, 60000);
+            return;
         }
     }
 };
