@@ -56,7 +56,7 @@ module.exports = {
         const evidencia = interaction.options.getAttachment('evidencia');
         
         const canalSancionesId = '1477387624288354324';
-        const canalBlacklistId = '1476760068199415888';
+        const canalBlacklistId = '1476776588665294989';
 
         // Verificación de jerarquía de Discord (Bot vs Usuario)
         if (member && !member.bannable) {
@@ -89,6 +89,7 @@ module.exports = {
             .setColor('#ff0000') 
             .setTitle(`🚫 Usuario Baneado - ${user.username}`)
             .setDescription(`**USUARIO :** <@${user.id}>\n**MODERADOR :** <@${interaction.user.id}>\n\n**MOTIVO :** ${motivo}`)
+            .setImage(imgbbLink)
             .setAuthor({ name: 'Sistema de Sanciones', iconURL: 'attachment://LogoPFP.png' })
             .setFooter({ text: 'Anda RP - Rol de calidad', iconURL: 'attachment://LogoPFP.png' })
             .setTimestamp();

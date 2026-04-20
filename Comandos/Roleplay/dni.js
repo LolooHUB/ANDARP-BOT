@@ -347,6 +347,7 @@ module.exports = {
                     { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━' },
                     { name: `${E_INFO} Próximos pasos`, value: '1. Dirígete al banco para gestionar tus ahorros.\n2. Visita la autoescuela para obtener tu carnet de conducir.\n3. Busca empleo en las oficinas del INEM.' }
                 )
+                .setImage('./attachments/BannerRegistroCivil.png')
                 .setFooter({ text: 'Bienvenido/a a la comunidad de Anda RP' })
                 .setTimestamp();
 
