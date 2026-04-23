@@ -143,7 +143,7 @@ module.exports = {
             // Validación de Permisos para Facciones
             if (customId === 't_facciones') {
                 const hasAccess = staffHierarchy.slice(6).some(id => member.roles.cache.has(id)) || member.permissions.has(PermissionFlagsBits.Administrator);
-                if (!hasAccess && !member.roles.cache.has('1476768951034970253')) { // Si no es staff avanzado ni fundación
+                if (!hasAccess && !member.roles.cache.has('1476791384894865419')) { // Si no es staff avanzado ni fundación
                     return interaction.reply({ 
                         content: '🚫 Acceso Denegado: Las solicitudes de Facciones requieren validación de Supervisión Avanzada.', 
                         flags: MessageFlags.Ephemeral 
@@ -175,7 +175,7 @@ module.exports = {
                 modal.addComponents(new ActionRowBuilder().addComponents(inputUser), new ActionRowBuilder().addComponents(inputAlianza), new ActionRowBuilder().addComponents(inputPropuesta));
             } else if (type === 'facciones') {
                 const inputFacName = new TextInputBuilder().setCustomId('f_fname').setLabel("Nombre de la Facción").setStyle(TextInputStyle.Short).setRequired(true);
-                const inputFacTipo = new TextInputBuilder().setCustomId('f_ftype').setLabel("Tipo: Mafias / Cartel / Policia / Medico").setStyle(TextInputStyle.Short).setRequired(true);
+                const inputFacTipo = new TextInputBuilder().setCustomId('f_ftype').setLabel("Tipo: Mafias / Fuerza Seguridad / Privado / Servicio de Emergencias.").setStyle(TextInputStyle.Short).setRequired(true);
                 const inputFacCant = new TextInputBuilder().setCustomId('f_fcount').setLabel("Cantidad de miembros aproximada").setStyle(TextInputStyle.Short).setRequired(true);
                 const inputFacHist = new TextInputBuilder().setCustomId('f_fhist').setLabel("Breve Lore o Historia").setStyle(TextInputStyle.Paragraph).setRequired(true);
                 modal.addComponents(
