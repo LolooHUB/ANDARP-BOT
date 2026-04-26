@@ -7,11 +7,20 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    AttachmentBuilder,
+    Events
 } = require('discord.js');
 const { db } = require('../Automatizaciones/firebase');
 const fs = require('fs');
 const path = require('path');
+
+/**
+ * 🚀 SISTEMA INTEGRAL DE APERTURAS Y SSU (SUPER SESIÓN UNITARIA)
+ * -------------------------------------------------------------
+ * Desarrollado para Anda RP. v6.0 - Edición Expandida.
+ * Incluye: Control de estados, Banners dinámicos, Bypass de Staff y Sanciones Automáticas.
+ */
 
 // --- ⚙️ CONFIGURACIÓN DE CANALES Y CONSTANTES ---
 const CANAL_ESTADO_ID = '1493197563934019685';
@@ -27,10 +36,10 @@ const EMOJI_CERRADO = '<:Cerrado2:1493238535270957116>';
 
 // --- 🛡️ ROLES DE STAFF AUTORIZADOS ---
 const ROLES_STAFF = [
-    '1476767461024989326',
-    '1476767863636234487',
-    '1476768334048661586',
-    '1476768951034970253'
+    '1476768122915782676',
+    '1476768019496829033',
+    '1476767750625038336',
+    '1476767536530849822'
 ];
 
 module.exports = {
@@ -42,12 +51,13 @@ module.exports = {
      * @param {import('discord.js').ChatInputCommandInteraction} interaction 
      */
     async execute(interaction) {
-        const { member, guild } = interaction;
+        const { member, guild, user } = interaction;
 
+        // --- 1. VALIDACIÓN DE JERARQUÍA ---
         const tienePermiso = member.roles.cache.some(role => ROLES_STAFF.includes(role.id));
         if (!tienePermiso) {
             return interaction.reply({
-                content: '❌ No cuentas con la jerarquía necesaria para ejecutar este comando.',
+                content: '❌ **ACCESO DENEGADO:** No cuentas con la jerarquía administrativa necesaria.',
                 ephemeral: true
             });
         }
@@ -57,36 +67,40 @@ module.exports = {
             const stateDoc = await docRef.get();
             const data = stateDoc.exists ? stateDoc.data() : { open: false, voting: false };
 
+            // --- 2. GESTIÓN DE ESTADOS (VOTACIÓN ACTIVA) ---
             if (data.voting) {
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('confirm_cancel_vote').setLabel('Cancelar Votación').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('confirm_bypass_vote').setLabel('Forzar SSU (Bypass)').setStyle(ButtonStyle.Success).setEmoji('⚡'),
+                    new ButtonBuilder().setCustomId('confirm_cancel_vote').setLabel('Anular Votación').setStyle(ButtonStyle.Danger),
                     new ButtonBuilder().setCustomId('abort_action').setLabel('Volver').setStyle(ButtonStyle.Secondary)
                 );
                 return interaction.reply({
-                    content: `${EMOJI_RELOJ} **Alerta:** Existe una votación activa. ¿Deseas interrumpirla?`,
+                    content: `${EMOJI_RELOJ} **SISTEMA EN ESPERA:** Existe una convocatoria activa. ¿Qué acción deseas realizar?`,
                     components: [row],
                     ephemeral: true
                 });
             }
 
+            // --- 3. GESTIÓN DE ESTADOS (SERVIDOR YA ABIERTO) ---
             if (data.open) {
                 const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('confirm_open_modal_cierre').setLabel('Cerrar Servidor').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('confirm_open_modal_cierre').setLabel('Finalizar Sesión').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
                     new ButtonBuilder().setCustomId('abort_action').setLabel('Mantener Abierto').setStyle(ButtonStyle.Secondary)
                 );
                 return interaction.reply({
-                    content: `${EMOJI_ABIERTO} **Aviso:** El servidor ya está **ABIERTO**. ¿Proceder al cierre?`,
+                    content: `${EMOJI_ABIERTO} **ESTADO ACTUAL: ABIERTO.** El servidor ya se encuentra operativo. ¿Proceder al cierre?`,
                     components: [row],
                     ephemeral: true
                 });
             }
 
-            const modal = new ModalBuilder().setCustomId('modal_setup_rol').setTitle('Configuración de Sesión');
+            // --- 4. FORMULARIO DE APERTURA (MODAL) ---
+            const modal = new ModalBuilder().setCustomId('modal_setup_rol').setTitle('Configuración de Nueva Sesión');
             
             const inputHora = new ActionRowBuilder().addComponents(
                 new TextInputBuilder()
                     .setCustomId('hora_rol')
-                    .setLabel("⏰ Hora de Inicio")
+                    .setLabel("⏰ Hora de Inicio Programada")
                     .setStyle(TextInputStyle.Short)
                     .setPlaceholder("Ej: 22:30 ESP / 18:30 ARG")
                     .setRequired(true)
@@ -95,9 +109,9 @@ module.exports = {
             const inputVotos = new ActionRowBuilder().addComponents(
                 new TextInputBuilder()
                     .setCustomId('min_gente')
-                    .setLabel("👥 Mínimo de Votos Positivos")
+                    .setLabel("👥 Votos Mínimos Requeridos")
                     .setStyle(TextInputStyle.Short)
-                    .setPlaceholder("Cantidad necesaria (Ej: 10)")
+                    .setPlaceholder("Cantidad necesaria (Ej: 15)")
                     .setMaxLength(2)
                     .setRequired(true)
             );
@@ -106,10 +120,8 @@ module.exports = {
             await interaction.showModal(modal);
 
         } catch (error) {
-            console.error("Error en Apertura Execute:", error);
-            if (!interaction.replied) {
-                return interaction.reply({ content: "❌ Error crítico con la base de datos.", ephemeral: true });
-            }
+            console.error("❌ ERROR EN APERTURA_EXECUTE:", error);
+            await this.registrarError(guild, "Comando Ejecutar", error);
         }
     },
 
@@ -125,51 +137,49 @@ module.exports = {
         const canalSesiones = guild.channels.cache.get(CANAL_SESIONES_ID);
         const canalLogs = guild.channels.cache.get(CANAL_LOGS_ID);
 
+        // --- BOTONES DE ACCIÓN RÁPIDA ---
         if (customId === 'abort_action') {
-            return interaction.update({ content: '✅ Operación cancelada.', components: [], ephemeral: true });
+            return interaction.update({ content: '✅ Operación cancelada por el usuario.', components: [], ephemeral: true });
         }
 
+        // --- BYPASS: FORZAR APERTURA SIN VOTOS ---
+        if (customId === 'confirm_bypass_vote') {
+            await interaction.deferUpdate();
+            const stateDoc = await docRef.get();
+            const stateData = stateDoc.data();
+            
+            const msgVotacion = await canalSesiones.messages.fetch(stateData.messageId).catch(() => null);
+            return await this.activarServidor(guild, user, "Staff Bypass (Forzado)", docRef, msgVotacion);
+        }
+
+        // --- ANULAR VOTACIÓN ---
         if (customId === 'confirm_cancel_vote') {
             await docRef.update({ voting: false, messageId: null, current_votes: 0 });
-            
-            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : ${EMOJI_CERRADO.split(':')[1]}`).catch(() => canalEstado.setName('〔🚦〕Estado : ❌'));
-            if (canalCodigo) {
-                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(console.error);
-            }
+            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Cerrado`).catch(() => {});
+            if (canalCodigo) await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
 
             return interaction.update({ content: `${EMOJI_CERRADO} **Votación anulada.** Canales restablecidos.`, components: [], ephemeral: true });
         }
 
-        if (customId === 'confirm_open_modal_cierre') {
-            const modalCierre = new ModalBuilder().setCustomId('modal_resumen_cierre').setTitle('Resumen de Finalización');
-            const inputResumen = new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('resumen_final')
-                    .setLabel("📝 Resumen de la sesión")
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(true)
-            );
-            modalCierre.addComponents(inputResumen);
-            return await interaction.showModal(modalCierre);
-        }
-
+        // --- PROCESAR FORMULARIO DE INICIO ---
         if (customId === 'modal_setup_rol') {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ ephemeral: true });
 
             const hora = fields.getTextInputValue('hora_rol');
             const minGente = parseInt(fields.getTextInputValue('min_gente'));
 
-            if (isNaN(minGente)) return interaction.editReply({ content: "❌ Formato de votos inválido." });
+            if (isNaN(minGente)) return interaction.editReply({ content: "❌ Error: La meta de votos debe ser un número." });
 
+            const bannerVotacion = new AttachmentBuilder('./attachments/BannerVotacionAbierta.png');
             const embedVotacion = new EmbedBuilder()
-                .setAuthor({ name: "Anda RP | Sistema de Sesiones", iconURL: guild.iconURL() })
-                .setTitle(`${EMOJI_RELOJ} Convocatoria de Disponibilidad`)
-                .setDescription(`Se ha propuesto una nueva sesión de rol.\n\n**Detalles:**\n⏰ Hora: **${hora}**\n👥 Requisito: **${minGente} votos ✅**\n\nReacciona para participar.`)
+                .setTitle(`${EMOJI_RELOJ} CONVOCATORIA DE DISPONIBILIDAD`)
+                .setDescription(`Se ha propuesto una nueva sesión de rol para Anda RP.\n\n**Detalles Técnicos:**\n⏰ Hora: **${hora}**\n👥 Requisito: **${minGente} votos ✅**\n\n*Al votar positivamente, te comprometes a participar en la sesión.*`)
+                .setImage('attachment://BannerVotacionAbierta.png')
                 .setColor(0xF1C40F)
-                .setFooter({ text: "Apertura automática al llegar a la meta." });
+                .setFooter({ text: "Sistema de Apertura Automática | Anda RP 2026", iconURL: guild.iconURL() });
 
-            const msg = await canalSesiones.send({ content: "<@&1476765007344828590>", embeds: [embedVotacion] });
-            await msg.react('✅'); await msg.react('🟨'); await msg.react('❌');
+            const msg = await canalSesiones.send({ content: "@everyone", embeds: [embedVotacion], files: [bannerVotacion] });
+            await msg.react('✅'); await msg.react('❌');
 
             await docRef.set({
                 open: false,
@@ -177,54 +187,117 @@ module.exports = {
                 target_votes: minGente,
                 messageId: msg.id,
                 host: user.id,
-                hora_propuesta: hora
+                hora_propuesta: hora,
+                timestamp: Date.now()
             });
 
-            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : 🔰 Espera`).catch(console.error);
-            if (canalCodigo) {
-                await canalCodigo.setName('〔🔐〕Codigo : Oculto').catch(console.error);
-                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(console.error);
-            }
+            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : 🔰 Espera`);
+            if (canalCodigo) await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false });
 
-            return interaction.editReply({ content: `${EMOJI_RELOJ} Votación publicada con éxito.` });
+            return interaction.editReply({ content: `✅ Votación publicada en <#${CANAL_SESIONES_ID}>.` });
+        }
+
+        // --- PROCESAR FORMULARIO DE CIERRE ---
+        if (customId === 'confirm_open_modal_cierre') {
+            const modalCierre = new ModalBuilder().setCustomId('modal_resumen_cierre').setTitle('Resumen de Finalización');
+            modalCierre.addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('resumen_final').setLabel("📝 Resumen de la sesión").setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(10)
+            ));
+            return await interaction.showModal(modalCierre);
         }
 
         if (customId === 'modal_resumen_cierre') {
-            if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ ephemeral: true });
-
+            await interaction.deferReply({ ephemeral: true });
             const resumen = fields.getTextInputValue('resumen_final');
-            const ahora = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+            const horaCierre = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
 
             await docRef.set({ open: false, voting: false, messageId: null, current_votes: 0 });
 
-            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Cerrado`).catch(console.error);
+            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Cerrado`);
             if (canalCodigo) {
-                await canalCodigo.setName('〔🔐〕Codigo : Oculto').catch(console.error);
-                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(console.error);
+                await canalCodigo.setName('〔🔐〕Codigo : Oculto');
+                await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false });
             }
 
+            const bannerCerrado = new AttachmentBuilder('./attachments/BannerServidorCerrado.png');
+            const embedPublico = new EmbedBuilder()
+                .setTitle(`${EMOJI_CERRADO} SESIÓN FINALIZADA`)
+                .setDescription("El servidor ha cerrado sus puertas. Gracias por participar en Anda RP.")
+                .setImage('attachment://BannerServidorCerrado.png')
+                .setColor(0xE74C3C);
+
+            await canalSesiones.send({ content: "@everyone", embeds: [embedPublico], files: [bannerCerrado] });
+
             const embedLog = new EmbedBuilder()
-                .setTitle(`${EMOJI_CERRADO} Log: Sesión Finalizada`)
+                .setTitle("📝 LOG DE ACTIVIDAD ADMINISTRATIVA")
                 .addFields(
                     { name: "👤 Responsable", value: `<@${user.id}>`, inline: true },
-                    { name: "📅 Fecha", value: ahora, inline: true },
+                    { name: "📅 Fecha/Hora", value: horaCierre, inline: true },
                     { name: "📝 Resumen", value: resumen }
                 )
-                .setColor(0xE74C3C);
+                .setColor(0x2B2D31)
+                .setThumbnail(user.displayAvatarURL());
 
             if (canalLogs) await canalLogs.send({ embeds: [embedLog] });
 
-            const embedPublico = new EmbedBuilder()
-                .setTitle(`${EMOJI_CERRADO} Servidor Cerrado`)
-                .setDescription("La sesión ha finalizado. ¡Gracias por participar!")
-                .setColor(0xE74C3C);
-
-            await canalSesiones.send({ content: "<@&1476765007344828590>", embeds: [embedPublico] });
-
-            return interaction.editReply({ content: "✅ Servidor cerrado correctamente." });
+            return interaction.editReply({ content: "✅ Sesión finalizada y logs archivados correctamente." });
         }
     },
 
+    /**
+     * FUNCIÓN CENTRAL DE ACTIVACIÓN DE SERVIDOR
+     */
+    async activarServidor(guild, hostUser, metodo, docRef, msgVotacion = null) {
+        let usuariosObligados = [];
+        
+        // --- 1. RASTREO DE VOTANTES (SISTEMA DE SANCIONES) ---
+        if (msgVotacion) {
+            try {
+                const reaction = msgVotacion.reactions.cache.get('✅');
+                if (reaction) {
+                    const reactUsers = await reaction.users.fetch();
+                    usuariosObligados = reactUsers.filter(u => !u.bot).map(u => `<@${u.id}>`);
+                }
+            } catch (err) { console.error("Error al obtener votantes:", err); }
+        }
+
+        await docRef.update({ open: true, voting: false });
+
+        const canalEstado = guild.channels.cache.get(CANAL_ESTADO_ID);
+        const canalCodigo = guild.channels.cache.get(CANAL_CODIGO_ID);
+        const canalSesiones = guild.channels.cache.get(CANAL_SESIONES_ID);
+
+        if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Abierto`);
+        if (canalCodigo) {
+            await canalCodigo.setName(`〔🔐〕Codigo : ${CODIGO_SERVER}`);
+            await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true });
+        }
+
+        const bannerAbierto = new AttachmentBuilder('./attachments/BannerServidorAbierto.png');
+        const embedAbierto = new EmbedBuilder()
+            .setTitle(`${EMOJI_ABIERTO} ¡SERVIDOR ABIERTO!`)
+            .setDescription(`La sesión ha iniciado oficialmente. Prepárate para el rol.\n\n**Acceso Directo:**\n🔑 Código: \`${CODIGO_SERVER}\`\n👤 Host: <@${hostUser.id || hostUser}>\n🛠️ Método: **${metodo}**`)
+            .setImage('attachment://BannerServidorAbierto.png')
+            .setColor(0x2ECC71)
+            .setFooter({ text: "Anda RP | Compromiso con la simulación" });
+
+        await canalSesiones.send({ content: "@everyone", embeds: [embedAbierto], files: [bannerAbierto] });
+
+        // --- 2. NOTIFICACIÓN DE OBLIGATORIEDAD ---
+        if (usuariosObligados.length > 0) {
+            const warningEmbed = new EmbedBuilder()
+                .setColor(0xFF0000)
+                .setTitle("⚠️ AVISO DE INCORPORACIÓN OBLIGATORIA")
+                .setDescription(`Los siguientes usuarios votaron positivamente y deben unirse de inmediato para evitar sanciones administrativas:\n\n${usuariosObligados.join(', ')}`)
+                .setFooter({ text: "El incumplimiento será reportado a Administración." });
+
+            await canalSesiones.send({ content: usuariosObligados.join(' '), embeds: [warningEmbed] });
+        }
+    },
+
+    /**
+     * MANEJADOR DE REACCIONES AUTOMÁTICO
+     */
     async handleReactions(reaction, user) {
         if (user.bot) return;
 
@@ -239,40 +312,49 @@ module.exports = {
             const votosActuales = reaction.count - 1;
 
             if (votosActuales >= state.target_votes) {
-                await docRef.update({ open: true, voting: false, messageId: null });
-
-                const guild = reaction.message.guild;
-                const canalEstado = guild.channels.cache.get(CANAL_ESTADO_ID);
-                const canalCodigo = guild.channels.cache.get(CANAL_CODIGO_ID);
-
-                if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Abierto`).catch(console.error);
-                if (canalCodigo) {
-                    await canalCodigo.setName(`〔🔐〕Codigo : ${CODIGO_SERVER}`).catch(console.error);
-                    await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true }).catch(console.error);
-                }
-
-                const embedAbierto = new EmbedBuilder()
-                    .setTitle(`${EMOJI_ABIERTO} ¡SERVIDOR ABIERTO!`)
-                    .setDescription(`Se ha alcanzado la meta de **${state.target_votes}** votos.\n\n**Acceso:**\n🔑 Código: \`${CODIGO_SERVER}\`\n👤 Host: <@${state.host}>`)
-                    .setColor(0x2ECC71)
-                    .setThumbnail(guild.iconURL());
-
-                await reaction.message.channel.send({ content: "<@&1476765007344828590>", embeds: [embedAbierto] });
-
+                await this.activarServidor(reaction.message.guild, state.host, "Votos Alcanzados", docRef, reaction.message);
+                
+                // --- DM DE CORTESÍA ---
+                const embedDM = new EmbedBuilder()
+                    .setTitle(`${EMOJI_ABIERTO} ¡SESIÓN INICIADA!`)
+                    .setDescription(`El servidor de **Anda RP** ya está abierto.\n🔑 Código: \`${CODIGO_SERVER}\`\n\n¡Te esperamos!`)
+                    .setColor(0x2ECC71);
+                
                 const usuarios = await reaction.users.fetch();
-                for (const [id, u] of usuarios) {
-                    if (u.bot) continue;
-                    try {
-                        const embedDM = new EmbedBuilder()
-                            .setTitle(`${EMOJI_ABIERTO} ¡Ya puedes entrar!`)
-                            .setDescription(`El servidor de **Anda RP** está activo.\n🔑 Código: \`${CODIGO_SERVER}\``)
-                            .setColor(0x2ECC71);
-                        await u.send({ embeds: [embedDM] });
-                    } catch (e) {}
-                }
+                usuarios.forEach(u => { if (!u.bot) u.send({ embeds: [embedDM] }).catch(() => {}); });
             }
         } catch (error) {
-            console.error("Error en handleReactions:", error);
+            console.error("❌ ERROR EN REACCIONES:", error);
         }
+    },
+
+    /**
+     * SISTEMA DE LOGS DE ERRORES
+     */
+    async registrarError(guild, modulo, error) {
+        const canalLogs = guild.channels.cache.get(CANAL_LOGS_ID);
+        if (!canalLogs) return;
+
+        const errorEmbed = new EmbedBuilder()
+            .setTitle("⚠️ ERROR CRÍTICO DETECTADO")
+            .setColor(0xFF0000)
+            .addFields(
+                { name: "Módulo", value: modulo, inline: true },
+                { name: "Mensaje", value: `\`\`\`${error.message}\`\`\`` }
+            )
+            .setTimestamp();
+
+        await canalLogs.send({ embeds: [errorEmbed] });
     }
 };
+
+/**
+ * -------------------------------------------------------------
+ * 📊 NOTAS TÉCNICAS (SÓLO PARA DESARROLLADORES)
+ * -------------------------------------------------------------
+ * - Persistencia: Firebase Firestore (server_state/current)
+ * - Transición de Canales: Basado en IDs estáticos.
+ * - Seguridad: Los permisos de @everyone se revocan en el cierre.
+ * - Sanciones: El bot genera un ping masivo a los que votaron ✅.
+ * -------------------------------------------------------------
+ */
