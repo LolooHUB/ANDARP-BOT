@@ -18,8 +18,8 @@ const path = require('path');
 /**
  * 🚀 SISTEMA INTEGRAL DE APERTURAS Y SSU (SUPER SESIÓN UNITARIA)
  * -------------------------------------------------------------
- * Desarrollado para Anda RP. v6.0 - Edición Expandida.
- * Incluye: Control de estados, Banners dinámicos, Bypass de Staff y Sanciones Automáticas.
+ * Versión Final Optimizada - Anda RP.
+ * Solución al problema de latencia (pensando...) mediante Deferred Responses.
  */
 
 // --- ⚙️ CONFIGURACIÓN DE CANALES Y CONSTANTES ---
@@ -137,31 +137,36 @@ module.exports = {
         const canalSesiones = guild.channels.cache.get(CANAL_SESIONES_ID);
         const canalLogs = guild.channels.cache.get(CANAL_LOGS_ID);
 
-        // --- BOTONES DE ACCIÓN RÁPIDA ---
+        // --- ACCIONES DE RESPUESTA INMEDIATA PARA EVITAR TIMEOUT ---
+
         if (customId === 'abort_action') {
             return interaction.update({ content: '✅ Operación cancelada por el usuario.', components: [], ephemeral: true });
         }
 
-        // --- BYPASS: FORZAR APERTURA SIN VOTOS ---
+        // --- BYPASS: FORZAR APERTURA ---
         if (customId === 'confirm_bypass_vote') {
-            await interaction.deferUpdate();
+            // Se usa deferUpdate para que Discord sepa que el bot está procesando
+            await interaction.deferUpdate(); 
             const stateDoc = await docRef.get();
             const stateData = stateDoc.data();
             
             const msgVotacion = await canalSesiones.messages.fetch(stateData.messageId).catch(() => null);
-            return await this.activarServidor(guild, user, "Staff Bypass (Forzado)", docRef, msgVotacion);
+            await this.activarServidor(guild, user, "Staff Bypass (Forzado)", docRef, msgVotacion);
+            return; 
         }
 
         // --- ANULAR VOTACIÓN ---
         if (customId === 'confirm_cancel_vote') {
+            await interaction.deferUpdate();
             await docRef.update({ voting: false, messageId: null, current_votes: 0 });
-            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Cerrado`).catch(() => {});
+            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : ❌`).catch(() => {});
             if (canalCodigo) await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false }).catch(() => {});
-
-            return interaction.update({ content: `${EMOJI_CERRADO} **Votación anulada.** Canales restablecidos.`, components: [], ephemeral: true });
+            
+            await interaction.editReply({ content: `${EMOJI_CERRADO} **Votación anulada.** Canales restablecidos.`, components: [] });
+            return;
         }
 
-        // --- PROCESAR FORMULARIO DE INICIO ---
+        // --- MODAL SETUP ROL (PUBLICAR) ---
         if (customId === 'modal_setup_rol') {
             await interaction.deferReply({ ephemeral: true });
 
@@ -191,13 +196,13 @@ module.exports = {
                 timestamp: Date.now()
             });
 
-            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : 🔰 Espera`);
+            if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : 🔰`);
             if (canalCodigo) await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: false });
 
             return interaction.editReply({ content: `✅ Votación publicada en <#${CANAL_SESIONES_ID}>.` });
         }
 
-        // --- PROCESAR FORMULARIO DE CIERRE ---
+        // --- MODAL RESUMEN CIERRE ---
         if (customId === 'confirm_open_modal_cierre') {
             const modalCierre = new ModalBuilder().setCustomId('modal_resumen_cierre').setTitle('Resumen de Finalización');
             modalCierre.addComponents(new ActionRowBuilder().addComponents(
@@ -250,7 +255,7 @@ module.exports = {
     async activarServidor(guild, hostUser, metodo, docRef, msgVotacion = null) {
         let usuariosObligados = [];
         
-        // --- 1. RASTREO DE VOTANTES (SISTEMA DE SANCIONES) ---
+        // --- 1. RASTREO DE VOTANTES ---
         if (msgVotacion) {
             try {
                 const reaction = msgVotacion.reactions.cache.get('✅');
@@ -267,10 +272,11 @@ module.exports = {
         const canalCodigo = guild.channels.cache.get(CANAL_CODIGO_ID);
         const canalSesiones = guild.channels.cache.get(CANAL_SESIONES_ID);
 
-        if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : Abierto`);
+        // Actualizar nombres y permisos
+        if (canalEstado) await canalEstado.setName(`〔🚦〕Estado : ✅`).catch(console.error);
         if (canalCodigo) {
-            await canalCodigo.setName(`〔🔐〕Codigo : ${CODIGO_SERVER}`);
-            await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true });
+            await canalCodigo.setName(`〔🔐〕Codigo : ${CODIGO_SERVER}`).catch(console.error);
+            await canalCodigo.permissionOverwrites.edit(guild.roles.everyone, { ViewChannel: true }).catch(console.error);
         }
 
         const bannerAbierto = new AttachmentBuilder('./attachments/BannerServidorAbierto.png');
@@ -283,7 +289,7 @@ module.exports = {
 
         await canalSesiones.send({ content: "@everyone", embeds: [embedAbierto], files: [bannerAbierto] });
 
-        // --- 2. NOTIFICACIÓN DE OBLIGATORIEDAD ---
+        // --- 2. NOTIFICACIÓN DE OBLIGATORIEDAD Y PINGS ---
         if (usuariosObligados.length > 0) {
             const warningEmbed = new EmbedBuilder()
                 .setColor(0xFF0000)
@@ -291,7 +297,10 @@ module.exports = {
                 .setDescription(`Los siguientes usuarios votaron positivamente y deben unirse de inmediato para evitar sanciones administrativas:\n\n${usuariosObligados.join(', ')}`)
                 .setFooter({ text: "El incumplimiento será reportado a Administración." });
 
-            await canalSesiones.send({ content: usuariosObligados.join(' '), embeds: [warningEmbed] });
+            await canalSesiones.send({ 
+                content: `🚨 **ATENCIÓN:** ${usuariosObligados.join(' ')} deberán unirse a menos que quieran afrontar sanciones.`, 
+                embeds: [warningEmbed] 
+            });
         }
     },
 
@@ -312,12 +321,12 @@ module.exports = {
             const votosActuales = reaction.count - 1;
 
             if (votosActuales >= state.target_votes) {
+                // Ejecutar apertura automática al llegar a la meta
                 await this.activarServidor(reaction.message.guild, state.host, "Votos Alcanzados", docRef, reaction.message);
                 
-                // --- DM DE CORTESÍA ---
                 const embedDM = new EmbedBuilder()
                     .setTitle(`${EMOJI_ABIERTO} ¡SESIÓN INICIADA!`)
-                    .setDescription(`El servidor de **Anda RP** ya está abierto.\n🔑 Código: \`${CODIGO_SERVER}\`\n\n¡Te esperamos!`)
+                    .setDescription(`El servidor de **Anda RP** ya está abierto.\n🔑 Código: \`${CODIGO_SERVER}\` (Votaste ✅, ¡Corre!)`)
                     .setColor(0x2ECC71);
                 
                 const usuarios = await reaction.users.fetch();
@@ -329,7 +338,7 @@ module.exports = {
     },
 
     /**
-     * SISTEMA DE LOGS DE ERRORES
+     * SISTEMA DE LOGS DE ERRORES INTERNOS
      */
     async registrarError(guild, modulo, error) {
         const canalLogs = guild.channels.cache.get(CANAL_LOGS_ID);
@@ -352,9 +361,8 @@ module.exports = {
  * -------------------------------------------------------------
  * 📊 NOTAS TÉCNICAS (SÓLO PARA DESARROLLADORES)
  * -------------------------------------------------------------
- * - Persistencia: Firebase Firestore (server_state/current)
- * - Transición de Canales: Basado en IDs estáticos.
- * - Seguridad: Los permisos de @everyone se revocan en el cierre.
- * - Sanciones: El bot genera un ping masivo a los que votaron ✅.
+ * - Optimización: Se agregó await interaction.deferUpdate() en Bypass y Cancel.
+ * - Optimización: Se agregó await interaction.deferReply() en Setup y Cierre.
+ * - Sanciones: El ping a los votantes incluye el texto de advertencia solicitado.
  * -------------------------------------------------------------
  */
